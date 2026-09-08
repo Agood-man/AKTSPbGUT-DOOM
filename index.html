@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>ТЕРПЛАНДИЯ 3D</title>
+<title>ПТУ 3D</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="ТЕРПЛАНДИЯ 3D">
+<meta name="apple-mobile-web-app-title" content="ПТУ 3D">
 <meta name="theme-color" content="#120c0a">
 <style>
   :root{
@@ -146,18 +146,21 @@
   #screen button:active{background:var(--slime)}
   #cont{background:var(--slime);color:#0d1205}
   #seedrow{display:flex;gap:8px;align-items:stretch}
+  #seedbtns{display:flex;gap:8px}
+  #seedbtns button{
+    padding:9px 14px;font:inherit;font-size:11px;letter-spacing:2px;
+    background:transparent;color:var(--bone);border:2px solid rgba(232,220,192,.35);
+    cursor:pointer;touch-action:manipulation;
+  }
+  #seedbtns button:active{background:rgba(232,220,192,.25)}
   #seedin{
-    width:230px;padding:11px 12px;font:inherit;font-size:14px;letter-spacing:3px;
+    width:260px;padding:11px 12px;font:inherit;font-size:14px;letter-spacing:3px;
     text-align:center;text-transform:uppercase;color:var(--bone);
     background:rgba(0,0,0,.45);border:2px solid rgba(232,220,192,.35);
   }
   #seedin::placeholder{color:rgba(232,220,192,.4);letter-spacing:2px}
   #seedin:focus{outline:none;border-color:var(--bone)}
-  #seedcopy{
-    width:48px;padding:0;font-size:18px;background:transparent;color:var(--bone);
-    border:2px solid rgba(232,220,192,.35);cursor:pointer;touch-action:manipulation;
-  }
-  #seedcopy:active{background:rgba(232,220,192,.25)}
+
   #cont:active{background:var(--bone)}
   .gone{display:none!important}
   kbd{background:rgba(232,220,192,.12);border:1px solid rgba(232,220,192,.3);padding:1px 6px;font-size:12px}
@@ -198,7 +201,7 @@
 
   <div id="screen">
     <div id="deathbg"></div>
-    <h1 id="title">ТЕРПЛАНДИЯ&nbsp;3D</h1>
+    <h1 id="title">ПТУ&nbsp;3D</h1>
     <p id="msg">Каждый уровень генерируется заново: комнаты, коридоры, колонны. Зачистил — проваливаешься в следующий, ещё злее.</p>
     <p style="font-size:12px;opacity:.7">Прогресс сохраняется на входе в каждый уровень. Смерть стирает сохранение, но рекорд остаётся.</p>
     <p style="font-size:12px">ПК: <kbd>WASD</kbd> ходьба · <kbd>мышь</kbd> обзор · <kbd>ЛКМ</kbd> огонь · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> оружие<br>
@@ -206,7 +209,10 @@
     <div id="seedrow">
       <input id="seedin" type="text" autocomplete="off" autocapitalize="characters"
              spellcheck="false" maxlength="24" placeholder="СЕМЯ ПОДЗЕМЕЛЬЯ">
-      <button id="seedcopy" type="button" title="Скопировать семя">⧉</button>
+    </div>
+    <div id="seedbtns">
+      <button id="seedpaste" type="button">ВСТАВИТЬ</button>
+      <button id="seedcopy" type="button">СКОПИРОВАТЬ</button>
     </div>
     <p id="seedhint" style="font-size:11px;opacity:.6">Пустое поле — случайное подземелье. Одно семя даёт одни и те же уровни.</p>
     <button id="cont" class="gone">ПРОДОЛЖИТЬ</button>
@@ -865,7 +871,9 @@ const GUNS = [
 ];
 // Стволы теперь находятся, а не выдаются сразу: первые уровни есть за что играть.
 let unlocked = [true, false, false, false];
-const GUN_DROP = {1:"gun1", 2:"gun2", 7:"gun3"};   // уровень -> предмет
+// С какого этажа ствол начинает попадаться. Пока не подобран — лежит на каждом
+// следующем этаже: иначе пропустил ящик на своём уровне и остался без оружия навсегда.
+const GUN_AT = [0, 2, 4, 8];
 const GUN_OF = {gun1:1, gun2:2, gun3:3};
 
 /* ================= сохранения =================
@@ -915,9 +923,9 @@ function saveRecord(){
 const P = {x:2.5, y:2.5, a:0, hp:100, armor:0, hurt:0, pick:0, inv:0};
 // Усилители появляются с 4-го уровня — на первых они бы съели и без того простую сложность.
 const BUFFS = {
-  rage:  {name:"ДЕДЛАЙН",   time:15},
-  haste: {name:"ЭНЕРГЕТИК", time:15},
-  shield:{name:"ШПОРА",     time:10}
+  rage:  {name:"ЯРОСТЬ",    time:15, color:"#c8321e"},
+  haste: {name:"УСКОРЕНИЕ", time:15, color:"#e0c020"},
+  shield:{name:"ЩИТ",       time:10, color:"#3f9fd0"}
 };
 let buff = null, buffT = 0, buffShown = -1;
 // статистика этажа для оценки
@@ -966,7 +974,7 @@ function levelGrade(){
   if (pace < 3.2 && acc > .45) g = 5;
   else if (pace < 5.2 && acc > .3) g = 4;
   else if (pace < 8.5) g = 3;
-  return `ЗАЧЁТ ЗА ЭТАЖ: ${g} · ${["ПЕРЕСДАЧА","УДОВЛ.","ХОРОШО","ОТЛИЧНО"][g-2]}`;
+  return `ОЦЕНКА ЗА ЭТАЖ: ${g} · ${["ПЛОХО","УДОВЛ.","ХОРОШО","ОТЛИЧНО"][g-2]}`;
 }
 
 function nextLevel(){
@@ -1000,16 +1008,20 @@ function nextLevel(){
   enemiesLeft = enemies.length;
 
   // ствол этажа и усилитель
-  if (GUN_DROP[level] && !unlocked[GUN_OF[GUN_DROP[level]]]){
+  let gunHint = "";
+  for (let n=1; n<GUNS.length; n++){
+    if (level < GUN_AT[n] || unlocked[n]) continue;
     const g = freeCell(4);
-    items.push({kind:GUN_DROP[level], x:g.x, y:g.y, t:0});
+    items.push({kind:"gun" + n, x:g.x, y:g.y, t:0});
+    gunHint = `НА ЭТАЖЕ: ${GUNS[n].name}`;
+    break;                       // не больше одного ствола за этаж
   }
   if (level >= 4 && Math.random() < .7){
     const keys = Object.keys(BUFFS), k = keys[Math.floor(Math.random()*keys.length)];
     const b = freeCell(5);
     items.push({kind:k, x:b.x, y:b.y, t:0});
   }
-  if (level >= 7 && unlocked[3]){
+  if (level >= 8 && unlocked[3]){
     const gr = freeCell(4);
     items.push({kind:"grenades", x:gr.x, y:gr.y, t:0});
   }
@@ -1028,7 +1040,7 @@ function nextLevel(){
   }
   beep("sine", 300, .5, .12, 600);
   showBanner((C.surge ? `ПРОРЫВ · УРОВЕНЬ ${level}` : `УРОВЕНЬ ${level}`) + ` · ${biome.name}`,
-             C.surge, grade);
+             C.surge, [grade, gunHint].filter(Boolean).join(" · "));
   stat = {fired:0, hit:0, t:0, n:enemies.length};
   combo = 0; comboT = 0;
   document.getElementById("combo").classList.remove("show");
@@ -1681,9 +1693,31 @@ function drawGun(){
     gr.addColorStop(1, "rgba(255,80,0,0)");
     ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(cx, fy, r, 0, 7); ctx.fill();
   }
-  ctx.fillStyle = "rgba(232,220,192,.6)";
-  ctx.fillRect(cx-6, H/2, 4, 1); ctx.fillRect(cx+2, H/2, 4, 1);
-  ctx.fillRect(cx, H/2-4, 1, 3); ctx.fillRect(cx, H/2+2, 1, 3);
+  drawCrosshair();
+}
+
+/* Прицел. Старый был несимметричен: зазор сверху 1 пиксель, снизу 2, а штрихи
+   стояли не по той точке, куда реально уходит пуля. Теперь всё строится вокруг
+   центра экрана, а зазор показывает реальный разброс текущего ствола. */
+function drawCrosshair(){
+  const u = Math.max(1, Math.round(W/220));            // толщина штриха
+  const ax = Math.round(W/2 - u/2), ay = Math.round(H/2 - u/2);
+  const arm = u*5;
+  const spreadPx = Math.round(Math.tan(GUNS[gun].spread || 0)/.66 * W/2);
+  const gap = Math.max(u*3, spreadPx);
+
+  const mark = (x, y, w, h) => {
+    ctx.fillStyle = "rgba(0,0,0,.5)";
+    ctx.fillRect(x-1, y-1, w+2, h+2);
+    ctx.fillStyle = "rgba(240,232,208,.9)";
+    ctx.fillRect(x, y, w, h);
+  };
+  mark(ax - gap - arm, ay, arm, u);      // слева
+  mark(ax + u + gap,   ay, arm, u);      // справа
+  mark(ax, ay - gap - arm, u, arm);      // сверху
+  mark(ax, ay + u + gap,   u, arm);      // снизу
+  ctx.fillStyle = "rgba(240,232,208,.55)";
+  ctx.fillRect(ax, ay, u, u);            // точка попадания
 }
 
 /* Когда врагов осталось мало, добивание превращается в поиск по карте.
@@ -1716,6 +1750,12 @@ function drawLastMarkers(horizon){
   }
 }
 
+const MAP_COLOR = {
+  medkit:"#7ba428", armor:"#4f7fa0", bullets:"#c9a227",
+  shells:"#c9622a", grenades:"#5b4a8c",
+  gun1:"#efe6cc", gun2:"#efe6cc", gun3:"#efe6cc"
+};
+
 function drawMinimap(){
   const s = Math.max(2, Math.round(W/190));
   const ox = 6, oy = 6;
@@ -1735,8 +1775,24 @@ function drawMinimap(){
     if (!e.alive) continue;
     ctx.fillRect(ox + e.x*s - s/2, oy + e.y*s - s/2, s, s);
   }
-  ctx.fillStyle = "#7ba428";
-  for (const it of items) ctx.fillRect(ox + it.x*s - s/2, oy + it.y*s - s/2, s*.8, s*.8);
+  // Предметы различаются по цвету, а усилители и стволы — ещё и пульсирующим
+  // ромбом в полную яркость: их надо замечать сразу.
+  for (const it of items){
+    const ix = ox + it.x*s, iy = oy + it.y*s;
+    const special = BUFFS[it.kind] || GUN_OF[it.kind] !== undefined;
+    ctx.fillStyle = BUFFS[it.kind] ? BUFFS[it.kind].color : (MAP_COLOR[it.kind] || "#7ba428");
+    if (special){
+      const r = s * (1.5 + .5*Math.sin(clock*6));
+      ctx.globalAlpha = 1;
+      ctx.save();
+      ctx.translate(ix, iy); ctx.rotate(Math.PI/4);
+      ctx.fillRect(-r/2, -r/2, r, r);
+      ctx.restore();
+      ctx.globalAlpha = .62;
+    } else {
+      ctx.fillRect(ix - s/2, iy - s/2, s*.8, s*.8);
+    }
+  }
   // Раньше игрок был двумя одинаковыми точками и направление читалось плохо.
   // Теперь это стрелка: остриё смотрит туда же, куда и камера.
   const px = ox + P.x*s, py = oy + P.y*s, a = P.a;
@@ -1778,6 +1834,7 @@ const seedIn = document.getElementById("seedin");
 const pauseBox = document.getElementById("pause");
 const pauseBtn = document.getElementById("pausebtn");
 const seedCopy = document.getElementById("seedcopy");
+const seedPaste = document.getElementById("seedpaste");
 const pauseSeedBtn = document.getElementById("pauseseedcopy");
 // запоминаем стартовые тексты, чтобы вернуть их при выходе в меню
 const TITLE0 = title.innerHTML, MSG0 = msg.textContent;
@@ -1809,13 +1866,33 @@ function copyText(text, btn){
   }
 }
 
+// Вставка из буфера. Если браузер не даёт читать буфер (Safari без жеста,
+// не-HTTPS), просто ставим курсор в поле — вставить можно вручную.
+function pasteSeed(btn){
+  const put = t => {
+    if (!t) return false;
+    seedIn.value = String(t).trim().replace(/^#/, "").toUpperCase().slice(0, 24);
+    if (btn){
+      const old = btn.textContent;
+      btn.textContent = "ГОТОВО";
+      setTimeout(() => { btn.textContent = old; }, 1200);
+    }
+    return true;
+  };
+  try {
+    if (navigator.clipboard?.readText){
+      navigator.clipboard.readText().then(put, () => seedIn.focus());
+      return;
+    }
+  } catch(e){}
+  seedIn.focus();
+}
+
 function refreshScreen(){
   const sv = loadGame(), r = getRecord();
   contBtn.classList.toggle("gone", !sv);
   if (sv) contBtn.textContent = `ПРОДОЛЖИТЬ · УР. ${sv.level}`;
   recLine.textContent = num(r.level,0) ? `Рекорд: уровень ${r.level}, фрагов ${r.kills}` : "";
-  // после забега поле показывает его семя — можно переиграть или отдать другу
-  if (sv) seedIn.value = (num(sv.seed, 0) >>> 0).toString(16).toUpperCase().padStart(8, "0");
 }
 
 function initAudio(){
@@ -1909,9 +1986,10 @@ function gameOver(){
   title.classList.add("long");
   msg.textContent = `Уровень ${level} · ${biome.name}. Фрагов: ${kills}. Семя подземелья: ${seedText()}.`;
   startBtn.textContent = "ЕЩЁ РАЗ";
-  const finished = seedText();
+  // Поле остаётся пустым: «ЕЩЁ РАЗ» — это новое подземелье.
+  // Семя прошлого забега видно в тексте выше и лежит под кнопкой «СКОПИРОВАТЬ».
+  seedIn.value = "";
   refreshScreen();
-  seedIn.value = finished;      // «ЕЩЁ РАЗ» переиграет то же подземелье
   document.exitPointerLock?.();
 }
 
@@ -1935,6 +2013,7 @@ onTap(startBtn, () => beginRun(null));
 onTap(contBtn, () => beginRun(loadGame()));
 onTap(pauseBtn, () => setPause(true));
 onTap(seedCopy, () => copyText(seedIn.value || seedText(), seedCopy));
+onTap(seedPaste, () => pasteSeed(seedPaste));
 onTap(pauseSeedBtn, () => copyText(seedText(), pauseSeedBtn));
 onTap(document.getElementById("resume"), () => setPause(false));
 onTap(document.getElementById("quit"), quitToMenu);
