@@ -34,6 +34,42 @@
   }
   #banner.show{opacity:1}
   #banner.surge{color:var(--blood)}
+  #banner span{display:block;font-size:13px;letter-spacing:2px;opacity:.85;margin-top:12px}
+
+  #combo{
+    position:absolute;left:0;right:0;top:13%;text-align:center;pointer-events:none;
+    font-size:clamp(15px,4.6vw,24px);letter-spacing:3px;color:var(--slime);
+    text-shadow:0 2px 0 #000,0 0 18px #000;opacity:0;transition:opacity .2s;
+  }
+  #combo.show{opacity:1}
+  #buff{
+    position:absolute;left:0;right:0;bottom:calc(58px + env(safe-area-inset-bottom));
+    text-align:center;pointer-events:none;font-size:12px;letter-spacing:3px;
+    color:var(--bone);text-shadow:0 2px 0 #000;
+  }
+
+  #pausebtn{
+    position:absolute;right:12px;top:calc(10px + env(safe-area-inset-top));
+    width:46px;height:46px;border-radius:10px;touch-action:manipulation;
+    border:2px solid rgba(232,220,192,.35);background:rgba(18,12,10,.55);
+    color:var(--bone);font:inherit;font-size:15px;line-height:1;cursor:pointer;
+  }
+  #pausebtn:active{background:rgba(232,220,192,.3)}
+
+  #pause{
+    position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:18px;text-align:center;padding:24px;
+    background:rgba(18,12,10,.9);
+  }
+  #pause h2{font-size:clamp(30px,9vw,54px);letter-spacing:6px;color:var(--bone);
+    text-shadow:0 3px 0 #000;margin:0}
+  #pause p{font-size:13px;opacity:.75;margin:0}
+  #pause button{
+    min-width:210px;padding:14px 26px;font:inherit;font-size:15px;letter-spacing:3px;
+    background:var(--bone);color:#1a120e;border:0;cursor:pointer;touch-action:manipulation;
+  }
+  #pause button:active{background:var(--slime)}
+  #quit{background:transparent;color:var(--bone);border:2px solid rgba(232,220,192,.4)}
   #wrap{position:relative;width:100%;height:100%;overflow:hidden}
   canvas{display:block;width:100%;height:100%;
     image-rendering:-webkit-optimize-contrast;image-rendering:pixelated}
@@ -109,6 +145,19 @@
   }
   #screen button:active{background:var(--slime)}
   #cont{background:var(--slime);color:#0d1205}
+  #seedrow{display:flex;gap:8px;align-items:stretch}
+  #seedin{
+    width:230px;padding:11px 12px;font:inherit;font-size:14px;letter-spacing:3px;
+    text-align:center;text-transform:uppercase;color:var(--bone);
+    background:rgba(0,0,0,.45);border:2px solid rgba(232,220,192,.35);
+  }
+  #seedin::placeholder{color:rgba(232,220,192,.4);letter-spacing:2px}
+  #seedin:focus{outline:none;border-color:var(--bone)}
+  #seedcopy{
+    width:48px;padding:0;font-size:18px;background:transparent;color:var(--bone);
+    border:2px solid rgba(232,220,192,.35);cursor:pointer;touch-action:manipulation;
+  }
+  #seedcopy:active{background:rgba(232,220,192,.25)}
   #cont:active{background:var(--bone)}
   .gone{display:none!important}
   kbd{background:rgba(232,220,192,.12);border:1px solid rgba(232,220,192,.3);padding:1px 6px;font-size:12px}
@@ -119,6 +168,9 @@
   <canvas id="c"></canvas>
   <div id="hurt"></div>
   <div id="banner"></div>
+  <button id="pausebtn" class="gone" aria-label="Пауза">❚❚</button>
+  <div id="combo"></div>
+  <div id="buff" class="gone"></div>
   <div id="pick"></div>
 
   <div id="hud">
@@ -134,6 +186,16 @@
   <div id="swap">СМЕНА</div>
   <div id="fire">ОГОНЬ</div>
 
+  <div id="pause" class="gone">
+    <h2>ПАУЗА</h2>
+    <p id="pauseinfo"></p>
+    <p id="pauseseed" style="font-size:12px;opacity:.7"></p>
+    <button id="pauseseedcopy" type="button" style="min-width:0;padding:8px 18px;font-size:12px;
+      background:transparent;color:var(--bone);border:2px solid rgba(232,220,192,.35)">СКОПИРОВАТЬ СЕМЯ</button>
+    <button id="resume">ПРОДОЛЖИТЬ</button>
+    <button id="quit">В МЕНЮ</button>
+  </div>
+
   <div id="screen">
     <div id="deathbg"></div>
     <h1 id="title">ТЕРПЛАНДИЯ&nbsp;3D</h1>
@@ -141,6 +203,12 @@
     <p style="font-size:12px;opacity:.7">Прогресс сохраняется на входе в каждый уровень. Смерть стирает сохранение, но рекорд остаётся.</p>
     <p style="font-size:12px">ПК: <kbd>WASD</kbd> ходьба · <kbd>мышь</kbd> обзор · <kbd>ЛКМ</kbd> огонь · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> оружие<br>
     Телефон: стик слева, «Огонь» справа, «Смена» — оружие, палец по экрану — обзор</p>
+    <div id="seedrow">
+      <input id="seedin" type="text" autocomplete="off" autocapitalize="characters"
+             spellcheck="false" maxlength="24" placeholder="СЕМЯ ПОДЗЕМЕЛЬЯ">
+      <button id="seedcopy" type="button" title="Скопировать семя">⧉</button>
+    </div>
+    <p id="seedhint" style="font-size:11px;opacity:.6">Пустое поле — случайное подземелье. Одно семя даёт одни и те же уровни.</p>
     <button id="cont" class="gone">ПРОДОЛЖИТЬ</button>
     <button id="start">НАЧАТЬ</button>
     <p id="rec" style="font-size:12px;opacity:.7"></p>
@@ -172,6 +240,17 @@ let runSeed = (Math.random()*0xFFFFFFFF) >>> 0;
 let RNG = Math.random;                       // во время игры — обычный random
 const rnd = n => Math.floor(RNG()*n);
 const seedText = () => runSeed.toString(16).toUpperCase().padStart(8, "0");
+
+/* Семя можно ввести руками и передать другому игроку.
+   Шестнадцатеричная запись читается как есть, любой другой текст хешируется. */
+function parseSeed(str){
+  const t = String(str || "").trim().replace(/^#/, "");
+  if (!t) return null;
+  if (/^[0-9a-fA-F]{1,8}$/.test(t)) return parseInt(t, 16) >>> 0;
+  let h = 0x811c9dc5;
+  for (let i=0;i<t.length;i++){ h ^= t.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return h >>> 0;
+}
 const roomCenter = r => ({x: r.x + r.w/2, y: r.y + r.h/2});
 
 function overlaps(a, b){
@@ -352,7 +431,27 @@ function genRings(){
   return {x: c + .5, y: c + .5};
 }
 
-const GENERATORS = {rooms:genRooms, maze:genMaze, caves:genCaves,
+// Первые этажи — маленький зал: драка начинается сразу, а не после минуты ходьбы.
+function genSmall(){
+  const w = 11 + rnd(5), h = 11 + rnd(5);
+  const x0 = 1 + rnd(MW - w - 2), y0 = 1 + rnd(MH - h - 2);
+  carveRect(x0, y0, x0 + w - 1, y0 + h - 1);
+  rooms.push({x:x0, y:y0, w, h});
+  // ряды парт
+  for (let y = y0 + 2; y < y0 + h - 2; y += 3)
+    for (let x = x0 + 1; x < x0 + w - 1; x += 2)
+      if (RNG() < .55) setCell(x, y, 1);
+  // пара ниш по краям
+  for (let i=0;i<2;i++){
+    const nw = 3 + rnd(3), nh = 3 + rnd(3);
+    const nx = x0 + rnd(Math.max(1, w - nw)), ny = RNG() < .5 ? y0 - nh : y0 + h;
+    carveRect(nx, Math.max(1, ny), nx + nw - 1, Math.min(MH-2, ny + nh - 1));
+    carveRect(nx, y0, nx, y0 + h - 1);
+  }
+  return roomCenter(rooms[0]);
+}
+
+const GENERATORS = {small:genSmall, rooms:genRooms, maze:genMaze, caves:genCaves,
                     arena:genArena, blocks:genBlocks, rings:genRings};
 
 /* ---------- связность ---------- */
@@ -433,7 +532,7 @@ function generateLevel(depth){
   rooms = [];
   // семя уровня — от семени забега и глубины
   RNG = mulberry32((runSeed ^ Math.imul(depth + 1, 0x9E3779B1)) >>> 0);
-  biome = BIOMES[rnd(BIOMES.length)];
+  biome = depth <= 3 ? {id:"small", name:"АУДИТОРИЯ"} : BIOMES[rnd(BIOMES.length)];
 
   let spawn = GENERATORS[biome.id]();
   connectAll(spawn);
@@ -631,6 +730,36 @@ enemyImage.onload = () => {
   }
 };
 
+function gunItem(color, label){
+  const [s,g] = blank();
+  g.fillStyle = "rgba(0,0,0,.45)"; g.fillRect(10, 22, 44, 30);
+  g.fillStyle = color; g.fillRect(12, 24, 40, 26);
+  g.fillStyle = "#efe6cc"; g.font = "bold 16px monospace"; g.textAlign = "center";
+  g.fillText(label, 32, 44);
+  return s;
+}
+function buffItem(color){
+  const [s,g] = blank();
+  const gr = g.createRadialGradient(32, 34, 2, 32, 34, 20);
+  gr.addColorStop(0, "#ffffff"); gr.addColorStop(.4, color); gr.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = gr; g.beginPath(); g.arc(32, 34, 20, 0, 7); g.fill();
+  return s;
+}
+function grenadeSprite(){
+  const [s,g] = blank();
+  g.fillStyle = "#2f3a20"; g.beginPath(); g.arc(32, 36, 9, 0, 7); g.fill();
+  g.fillStyle = "#8d9a5e"; g.fillRect(29, 23, 6, 8);
+  return s;
+}
+function boomSprite(){
+  const [s,g] = blank();
+  const gr = g.createRadialGradient(32, 32, 2, 32, 32, 30);
+  gr.addColorStop(0, "#fff6d0"); gr.addColorStop(.35, "#ffb020");
+  gr.addColorStop(.7, "#c0350a"); gr.addColorStop(1, "rgba(90,20,0,0)");
+  g.fillStyle = gr; g.beginPath(); g.arc(32, 32, 30, 0, 7); g.fill();
+  return s;
+}
+
 const ART = {
   // Одно и то же первое фото используется для всех типов врагов.
   imp:[ENEMY_SPRITE, ENEMY_SPRITE],
@@ -642,7 +771,11 @@ const ART = {
   armor:armorItem(),
   bullets:ammoBox("#4a7a2e","П"),
   shells:ammoBox("#8a2320","Д"),
-  fireball:fireballSprite()
+  fireball:fireballSprite(),
+  grenades:ammoBox("#5b4a8c","Г"),
+  gun1:gunItem("#8a2320","Д"), gun2:gunItem("#4a7a2e","П"), gun3:gunItem("#5b4a8c","Г"),
+  rage:buffItem("#c8321e"), haste:buffItem("#e0c020"), shield:buffItem("#3f9fd0"),
+  grenade:grenadeSprite(), boom:boomSprite()
 };
 
 // Половина ширины врага: ровно столько же занимает его спрайт на экране.
@@ -681,7 +814,9 @@ const curve = () => ({
   // 6 врагов на первом, 19 к 10-му, дальше +1 за каждые 11 уровней, потолок 30
   count:   Math.round(Math.min(30, level <= 10 ? 4 + Math.round(level*1.5)
                                 : 19 + Math.round(11*Math.pow((depth()-10)/140, .7)))
-                      * (isSurge() ? 1.2 : 1)),
+                      * (isSurge() ? 1.2 : 1)
+                      // первые этажи — тесная аудитория, там и половины хватает
+                      * (level <= 3 ? .7 : 1)),
   // здоровье: имп до 7, бык до 19, маг до 9 — дальше не растёт никогда
   hpBonus: type => Math.floor(ramp(type === "bull" ? 12 : type === "caster" ? 6 : 5, .55)),
   // состав отряда смещается к тяжёлым, но импы не исчезают
@@ -725,8 +860,13 @@ function beep(type, f0, dur, vol, f1){
 const GUNS = [
   {name:"ПИСТОЛЕТ", cd:.32, dmg:1, pellets:1, spread:.01,  ammo:null,     snd:[420,.1,.18]},
   {name:"ДРОБОВИК", cd:.85, dmg:2, pellets:5, spread:.085, ammo:"shells", snd:[150,.22,.3]},
-  {name:"ПУЛЕМЁТ",  cd:.09, dmg:1, pellets:1, spread:.03,  ammo:"bullets",snd:[520,.06,.12]}
+  {name:"ПУЛЕМЁТ",  cd:.09, dmg:1, pellets:1, spread:.03,  ammo:"bullets",snd:[520,.06,.12]},
+  {name:"ГРАНАТОМЁТ", cd:1.0, dmg:0, pellets:0, spread:0, ammo:"grenades", snd:[95,.28,.34], launcher:true}
 ];
+// Стволы теперь находятся, а не выдаются сразу: первые уровни есть за что играть.
+let unlocked = [true, false, false, false];
+const GUN_DROP = {1:"gun1", 2:"gun2", 7:"gun3"};   // уровень -> предмет
+const GUN_OF = {gun1:1, gun2:2, gun3:3};
 
 /* ================= сохранения =================
    localStorage местами запрещён (приватный режим, встроенный просмотр),
@@ -746,7 +886,8 @@ function saveGame(){
   store.set(SAVE_KEY, JSON.stringify({
     v:1, level, kills, gun, seed:runSeed,
     hp:Math.round(P.hp), armor:Math.round(P.armor),
-    bullets:ammo.bullets, shells:ammo.shells
+    bullets:ammo.bullets, shells:ammo.shells, grenades:ammo.grenades,
+    guns:unlocked.reduce((m, v, i) => m | (v ? 1 << i : 0), 0)
   }));
 }
 function loadGame(){
@@ -772,9 +913,19 @@ function saveRecord(){
 
 /* ================= состояние ================= */
 const P = {x:2.5, y:2.5, a:0, hp:100, armor:0, hurt:0, pick:0, inv:0};
+// Усилители появляются с 4-го уровня — на первых они бы съели и без того простую сложность.
+const BUFFS = {
+  rage:  {name:"ДЕДЛАЙН",   time:15},
+  haste: {name:"ЭНЕРГЕТИК", time:15},
+  shield:{name:"ШПОРА",     time:10}
+};
+let buff = null, buffT = 0, buffShown = -1;
+// статистика этажа для оценки
+let stat = {fired:0, hit:0, t:0, n:0};
+let clock = 0;
 const INV_TIME = .45;   // окно неуязвимости после попадания
 let enemies = [], items = [], shots = [];
-let ammo = {bullets:45, shells:10};
+let ammo = {bullets:45, shells:10, grenades:0};
 let gun = 0, kills = 0, level = 0, enemiesLeft = 0;
 let playing = false, flash = 0, recoil = 0, cooldown = 0;
 const keys = {};
@@ -783,7 +934,9 @@ function freeCell(minDist){
   for (let i=0;i<800;i++){
     const x = 1.5 + Math.random()*(MW-3), y = 1.5 + Math.random()*(MH-3);
     if (solid(x, y, .34)) continue;
-    if (Math.hypot(x-P.x, y-P.y) < minDist) continue;
+    // на маленькой карте держать всех далеко невозможно — постепенно ослабляем требование
+    const md = minDist * (i < 300 ? 1 : i < 600 ? .6 : .35);
+    if (Math.hypot(x-P.x, y-P.y) < md) continue;
     return {x,y};
   }
   // запасной вариант: первая же свободная клетка
@@ -794,17 +947,30 @@ function freeCell(minDist){
 }
 
 let bannerT = null;
-function showBanner(text, surge){
+function showBanner(text, surge, sub){
   const b = document.getElementById("banner");
   if (!b) return;
-  b.textContent = text;
+  // вторая строка — оценка за прошлый этаж
+  b.innerHTML = sub ? `${text}<span>${sub}</span>` : text;
   b.classList.toggle("surge", !!surge);
   b.classList.add("show");
   clearTimeout(bannerT);
   bannerT = setTimeout(() => b.classList.remove("show"), surge ? 2000 : 1400);
 }
 
+function levelGrade(){
+  if (!stat.n) return "";
+  const acc = stat.fired ? stat.hit/stat.fired : 0;
+  const pace = stat.t / stat.n;               // секунд на врага
+  let g = 2;
+  if (pace < 3.2 && acc > .45) g = 5;
+  else if (pace < 5.2 && acc > .3) g = 4;
+  else if (pace < 8.5) g = 3;
+  return `ЗАЧЁТ ЗА ЭТАЖ: ${g} · ${["ПЕРЕСДАЧА","УДОВЛ.","ХОРОШО","ОТЛИЧНО"][g-2]}`;
+}
+
 function nextLevel(){
+  const grade = level > 0 ? levelGrade() : "";
   if (level > 0){
     // передышка между уровнями, иначе потери копятся и добивают на 5-6-м
     P.hp = Math.min(100, P.hp + curve().levelHeal);
@@ -833,6 +999,21 @@ function nextLevel(){
   }
   enemiesLeft = enemies.length;
 
+  // ствол этажа и усилитель
+  if (GUN_DROP[level] && !unlocked[GUN_OF[GUN_DROP[level]]]){
+    const g = freeCell(4);
+    items.push({kind:GUN_DROP[level], x:g.x, y:g.y, t:0});
+  }
+  if (level >= 4 && Math.random() < .7){
+    const keys = Object.keys(BUFFS), k = keys[Math.floor(Math.random()*keys.length)];
+    const b = freeCell(5);
+    items.push({kind:k, x:b.x, y:b.y, t:0});
+  }
+  if (level >= 7 && unlocked[3]){
+    const gr = freeCell(4);
+    items.push({kind:"grenades", x:gr.x, y:gr.y, t:0});
+  }
+
   const drops = [
     ["medkit",  C.medkits],
     ["bullets", C.bullets],
@@ -846,15 +1027,21 @@ function nextLevel(){
     }
   }
   beep("sine", 300, .5, .12, 600);
-  showBanner((C.surge ? `ПРОРЫВ · УРОВЕНЬ ${level}` : `УРОВЕНЬ ${level}`) + ` · ${biome.name}`, C.surge);
+  showBanner((C.surge ? `ПРОРЫВ · УРОВЕНЬ ${level}` : `УРОВЕНЬ ${level}`) + ` · ${biome.name}`,
+             C.surge, grade);
+  stat = {fired:0, hit:0, t:0, n:enemies.length};
+  combo = 0; comboT = 0;
+  document.getElementById("combo").classList.remove("show");
+  grenades.length = 0; booms.length = 0;
   updateHUD();
   saveGame();
 }
 
-function reset(){
-  runSeed = (Math.random()*0xFFFFFFFF) >>> 0;
+function reset(seed){
+  runSeed = seed != null ? (seed >>> 0) : (Math.random()*0xFFFFFFFF) >>> 0;
   P.hp = 100; P.armor = 0;
-  ammo = {bullets:45, shells:10};
+  ammo = {bullets:45, shells:10, grenades:0};
+  unlocked = [true, false, false, false];
   gun = 0; kills = 0; level = 0;
   nextLevel();
 }
@@ -993,6 +1180,37 @@ function angleDiff(a, b){
   return d;
 }
 
+/* Серия убийств: главный источник быстрого удовольствия.
+   Названия — из колледжной жизни, растут вместе с серией. */
+let combo = 0, comboT = 0;
+const RANKS = [[20,"ОТЧИСЛЕН ВЕСЬ ПОТОК"],[15,"КРАСНЫЙ ДИПЛОМ"],[10,"АВТОМАТ"],
+               [7,"СЕССИЯ"],[5,"КУРСОВАЯ"],[3,"КОЛЛОКВИУМ"],[2,"ЗАЧЁТ"]];
+
+function registerKill(){
+  kills++;
+  combo++; comboT = 3;
+  beep("sawtooth", 110 + Math.min(10, combo)*20, .35, .2);
+  if (combo >= 2){
+    const r = RANKS.find(([n]) => combo >= n);
+    const el = document.getElementById("combo");
+    el.textContent = `×${combo} · ${r[1]}`;
+    el.classList.add("show");
+  }
+}
+
+// Общая точка урона по врагу: и выстрелы, и взрывы идут через неё.
+function damageEnemy(e, dmg){
+  if (!e.alive) return;
+  e.hp -= dmg;
+  if (e.hp > 0){ beep("triangle", 320, .07, .1); return; }
+  e.alive = false; e.deadT = 0; e.bloodT = 2.6;
+  registerKill();
+  const dry = ammo.bullets < 12 && ammo.shells < 3;
+  if (dry || Math.random() < curve().dropChance){
+    items.push({kind: Math.random() < .5 ? "bullets" : "medkit", x:e.x, y:e.y, t:0});
+  }
+}
+
 function hitscan(offset, dmg){
   const a = P.a + offset;
   const rx = Math.cos(a), ry = Math.sin(a);
@@ -1009,17 +1227,25 @@ function hitscan(offset, dmg){
     if (t < bestT){ bestT = t; best = e; }
   }
   if (!best) return;
-  best.hp -= dmg;
-  if (best.hp <= 0){
-    best.alive = false; best.deadT = 0;
-    best.bloodT = 2.6;
-    kills++;
-    beep("sawtooth", 110, .35, .2);
-    const dry = ammo.bullets < 12 && ammo.shells < 3;   // страховка от голодания
-    if (dry || Math.random() < curve().dropChance){
-      items.push({kind: Math.random() < .5 ? "bullets" : "medkit", x:best.x, y:best.y, t:0});
-    }
-  } else beep("triangle", 320, .07, .1);
+  stat.hit++;
+  damageEnemy(best, dmg);
+}
+
+/* ---- гранатомёт ---- */
+const grenades = [], booms = [];
+function explode(x, y){
+  booms.push({x, y, t:0});
+  beep("sawtooth", 70, .4, .3, 40);
+  flash = 1;
+  const R = 2.4, D = 7 * (buff === "rage" ? 2 : 1);
+  for (const e of enemies){
+    if (!e.alive) continue;
+    const d = Math.hypot(e.x - x, e.y - y);
+    if (d > R) continue;
+    damageEnemy(e, Math.max(2, Math.round(D * (1 - d/R*.7))));
+  }
+  const pd = Math.hypot(P.x - x, P.y - y);
+  if (pd < 1.9) damagePlayer(Math.round(14 * (1 - pd/1.9)));   // своей же гранатой тоже прилетит
 }
 
 function shoot(){
@@ -1029,12 +1255,27 @@ function shoot(){
   if (g.ammo) ammo[g.ammo]--;
   cooldown = g.cd; recoil = 1; flash = 1;
   beep("square", g.snd[0], g.snd[1], g.snd[2]);
-  for (let i=0;i<g.pellets;i++) hitscan((Math.random()*2-1)*g.spread, g.dmg);
+  const mult = buff === "rage" ? 2 : 1;
+  if (g.launcher){
+    stat.fired++;
+    grenades.push({x:P.x + Math.cos(P.a)*.4, y:P.y + Math.sin(P.a)*.4,
+                   vx:Math.cos(P.a)*7, vy:Math.sin(P.a)*7, t:0});
+  } else {
+    for (let i=0;i<g.pellets;i++){
+      stat.fired++;
+      hitscan((Math.random()*2-1)*g.spread, g.dmg * mult);
+    }
+  }
   updateHUD();
 }
 
 function switchGun(n){
-  gun = (n + GUNS.length) % GUNS.length;
+  const N = GUNS.length;
+  const dir = n < gun ? -1 : 1;
+  let i = ((n % N) + N) % N;
+  for (let k=0; k<N && !unlocked[i]; k++) i = ((i + dir) % N + N) % N;
+  if (!unlocked[i] || i === gun) return;
+  gun = i;
   updateHUD();
   beep("sine", 700, .05, .07);
 }
@@ -1053,7 +1294,7 @@ function canSee(e){
 
 /* ================= шаг мира ================= */
 function damagePlayer(amount){
-  if (P.inv > 0) return;
+  if (P.inv > 0 || buff === "shield") return;
   P.inv = INV_TIME;
   if (P.armor > 0){
     const absorbed = Math.min(P.armor, amount * .45);
@@ -1077,7 +1318,7 @@ function update(dt){
   if (keys.arrowright) P.a += 2.2*dt;
   fw += touch.fw; st += touch.st;
 
-  const sp = 2.7*dt;
+  const sp = 2.7 * (buff === "haste" ? 1.42 : 1) * dt;
   if (fw || st){
     const len = Math.hypot(fw, st) || 1;
     const f = fw/len, s = st/len;
@@ -1091,6 +1332,45 @@ function update(dt){
   flash = Math.max(0, flash - dt*9);
   P.hurt = Math.max(0, P.hurt - dt*2);
   P.inv = Math.max(0, P.inv - dt);
+  clock += dt; stat.t += dt;
+
+  if (comboT > 0){
+    comboT -= dt;
+    if (comboT <= 0){ combo = 0; document.getElementById("combo").classList.remove("show"); }
+  }
+
+  const buffEl = document.getElementById("buff");
+  if (buff){
+    buffT -= dt;
+    if (buffT <= 0){ buff = null; buffShown = -1; buffEl.classList.add("gone"); beep("sine", 200, .2, .1); }
+    else {
+      const sec = Math.ceil(buffT);
+      if (sec !== buffShown){
+        buffShown = sec;
+        buffEl.textContent = `${BUFFS[buff].name} · ${sec}`;
+        buffEl.classList.remove("gone");
+      }
+    }
+  }
+
+  // гранаты
+  for (const b of grenades){
+    b.t += dt;
+    const ox = b.x, oy = b.y;
+    b.x += b.vx*dt; b.y += b.vy*dt;
+    let hitE = null;
+    for (const e of enemies){
+      if (!e.alive) continue;
+      if (segDist(e.x, e.y, ox, oy, b.x, b.y) < HITR(e)){ hitE = e; break; }
+    }
+    if (hitE || solid(b.x, b.y, .1) || b.t > 3){
+      b.dead = true;
+      explode(hitE ? hitE.x : ox, hitE ? hitE.y : oy);
+    }
+  }
+  for (let i=grenades.length-1; i>=0; i--) if (grenades[i].dead) grenades.splice(i, 1);
+  for (const e of booms) e.t += dt;
+  for (let i=booms.length-1; i>=0; i--) if (booms[i].t > .45) booms.splice(i, 1);
   P.pick = Math.max(0, P.pick - dt*2);
   document.getElementById("hurt").style.opacity = P.hurt;
   document.getElementById("pick").style.opacity = P.pick;
@@ -1212,6 +1492,20 @@ function update(dt){
       if (P.armor >= 100) taken = false; else P.armor = Math.min(100, P.armor + 30);
     } else if (it.kind === "bullets") ammo.bullets += curve().bulletAmt;
     else if (it.kind === "shells") ammo.shells += curve().shellAmt;
+    else if (it.kind === "grenades") ammo.grenades += 3;
+    else if (GUN_OF[it.kind] !== undefined){
+      const n = GUN_OF[it.kind];
+      unlocked[n] = true; gun = n;
+      if (n === 1) ammo.shells += 8;
+      if (n === 2) ammo.bullets += 30;
+      if (n === 3) ammo.grenades += 5;
+      showBanner(`${GUNS[n].name} НАЙДЕН`, true);
+      beep("square", 300, .5, .18, 900);
+    } else if (BUFFS[it.kind]){
+      buff = it.kind; buffT = BUFFS[it.kind].time; buffShown = -1;
+      showBanner(BUFFS[it.kind].name, true);
+      beep("sine", 400, .4, .16, 1100);
+    }
     if (taken){
       it.dead = true; P.pick = .8;
       beep("sine", 880, .12, .12, 1400);
@@ -1292,6 +1586,12 @@ function render(){
   for (const b of shots){
     list.push({x:b.x, y:b.y, img:ART.fireball, scale:.45, yOff:.05});
   }
+  for (const b of grenades){
+    list.push({x:b.x, y:b.y, img:ART.grenade, scale:.3, yOff:.18});
+  }
+  for (const e of booms){
+    list.push({x:e.x, y:e.y, img:ART.boom, scale:1.1 + e.t*4.5, yOff:.05, boom:true, boomT:e.t});
+  }
 
   const invDet = 1/(planeX*dirY - dirX*planeY);
   const drawn = list.map(o => {
@@ -1312,7 +1612,8 @@ function render(){
     const bright = Math.max(.25, 1 - o.ty/13);
     sctx.clearRect(0,0,64,64);
     sctx.save();
-    sctx.globalAlpha = o.deadBlood ? Math.max(0, 1 - o.bloodT/1.15) : 1;
+    sctx.globalAlpha = o.boom ? Math.max(0, 1 - o.boomT/.45)
+                     : o.deadBlood ? Math.max(0, 1 - o.bloodT/1.15) : 1;
     sctx.filter = `brightness(${bright})`;
     if (o.dead && !o.deadBlood){
       // Яркая короткая анимация смерти: враг заваливается на бок,
@@ -1348,6 +1649,7 @@ function render(){
     }
   }
 
+  drawLastMarkers(horizon);
   drawGun();
   drawMinimap();
 }
@@ -1384,6 +1686,36 @@ function drawGun(){
   ctx.fillRect(cx, H/2-4, 1, 3); ctx.fillRect(cx, H/2+2, 1, 3);
 }
 
+/* Когда врагов осталось мало, добивание превращается в поиск по карте.
+   Маркеры показывают, куда бежать. */
+function drawLastMarkers(horizon){
+  if (!playing || enemiesLeft === 0 || enemiesLeft > 3) return;
+  const pulse = .45 + .35*Math.sin(clock*7);
+  const half = Math.atan(.66);
+  ctx.fillStyle = `rgba(214,64,44,${pulse.toFixed(2)})`;
+  for (const e of enemies){
+    if (!e.alive) continue;
+    const rel = angleDiff(Math.atan2(e.y - P.y, e.x - P.x), P.a);
+    const size = Math.max(7, W/44);
+    if (Math.abs(rel) < half){
+      // в поле зрения — галочка над врагом
+      const sx = (W/2) * (1 + Math.tan(rel)/.66);
+      const y = horizon - Math.max(46, H*.22);
+      ctx.beginPath();
+      ctx.moveTo(sx, y + size); ctx.lineTo(sx - size, y); ctx.lineTo(sx + size, y);
+      ctx.closePath(); ctx.fill();
+    } else {
+      // за спиной — стрелка у края экрана
+      const left = rel < 0;
+      const x = left ? size + 2 : W - size - 2;
+      ctx.beginPath();
+      ctx.moveTo(left ? x - size : x + size, horizon);
+      ctx.lineTo(x, horizon - size); ctx.lineTo(x, horizon + size);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+}
+
 function drawMinimap(){
   const s = Math.max(2, Math.round(W/190));
   const ox = 6, oy = 6;
@@ -1405,9 +1737,17 @@ function drawMinimap(){
   }
   ctx.fillStyle = "#7ba428";
   for (const it of items) ctx.fillRect(ox + it.x*s - s/2, oy + it.y*s - s/2, s*.8, s*.8);
+  // Раньше игрок был двумя одинаковыми точками и направление читалось плохо.
+  // Теперь это стрелка: остриё смотрит туда же, куда и камера.
+  const px = ox + P.x*s, py = oy + P.y*s, a = P.a;
   ctx.fillStyle = "#e8dcc0";
-  ctx.fillRect(ox + P.x*s - s/2, oy + P.y*s - s/2, s, s);
-  ctx.fillRect(ox + (P.x + Math.cos(P.a)*1.2)*s - 1, oy + (P.y + Math.sin(P.a)*1.2)*s - 1, 2, 2);
+  ctx.beginPath();
+  ctx.moveTo(px + Math.cos(a)*s*2.6, py + Math.sin(a)*s*2.6);
+  ctx.lineTo(px + Math.cos(a + 2.55)*s*1.5, py + Math.sin(a + 2.55)*s*1.5);
+  ctx.lineTo(px + Math.cos(a + Math.PI)*s*.6, py + Math.sin(a + Math.PI)*s*.6);
+  ctx.lineTo(px + Math.cos(a - 2.55)*s*1.5, py + Math.sin(a - 2.55)*s*1.5);
+  ctx.closePath();
+  ctx.fill();
   ctx.globalAlpha = 1;
 }
 
@@ -1416,7 +1756,7 @@ let last = 0, autoSave = 0;
 function loop(t){
   requestAnimationFrame(loop);
   const dt = Math.min(.05, (t - last)/1000 || 0); last = t;
-  if (playing){
+  if (playing && !paused){
     update(dt);
     autoSave += dt;
     if (autoSave > 15){ autoSave = 0; saveGame(); }
@@ -1425,7 +1765,7 @@ function loop(t){
 }
 // уход из вкладки/сворачивание приложения — тоже точка сохранения
 addEventListener("visibilitychange", () => {
-  if (document.hidden){ saveGame(); AC?.suspend?.(); }
+  if (document.hidden){ saveGame(); if (playing) setPause(true); AC?.suspend?.(); }
   else { AC?.resume?.(); last = performance.now(); }
 });
 addEventListener("pagehide", saveGame);
@@ -1434,17 +1774,48 @@ addEventListener("pagehide", saveGame);
 const screen = document.getElementById("screen");
 const title = document.getElementById("title");
 const msg = document.getElementById("msg");
+const seedIn = document.getElementById("seedin");
+const pauseBox = document.getElementById("pause");
+const pauseBtn = document.getElementById("pausebtn");
+const seedCopy = document.getElementById("seedcopy");
+const pauseSeedBtn = document.getElementById("pauseseedcopy");
+// запоминаем стартовые тексты, чтобы вернуть их при выходе в меню
+const TITLE0 = title.innerHTML, MSG0 = msg.textContent;
 const startBtn = document.getElementById("start");
 const deathbg = document.getElementById("deathbg");
 
 const contBtn = document.getElementById("cont");
 const recLine = document.getElementById("rec");
 
+// Короткое «скопировано» вместо иконки, с запасным путём для старых Safari.
+function copyText(text, btn){
+  const done = () => {
+    if (!btn) return;
+    const old = btn.textContent;
+    btn.textContent = "✓";
+    setTimeout(() => { btn.textContent = old; }, 1200);
+  };
+  try {
+    if (navigator.clipboard?.writeText){ navigator.clipboard.writeText(text).then(done, () => fallback()); return; }
+  } catch(e){}
+  fallback();
+  function fallback(){
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, 99);
+      document.execCommand("copy"); ta.remove(); done();
+    } catch(e){}
+  }
+}
+
 function refreshScreen(){
   const sv = loadGame(), r = getRecord();
   contBtn.classList.toggle("gone", !sv);
   if (sv) contBtn.textContent = `ПРОДОЛЖИТЬ · УР. ${sv.level}`;
   recLine.textContent = num(r.level,0) ? `Рекорд: уровень ${r.level}, фрагов ${r.kills}` : "";
+  // после забега поле показывает его семя — можно переиграть или отдать другу
+  if (sv) seedIn.value = (num(sv.seed, 0) >>> 0).toString(16).toUpperCase().padStart(8, "0");
 }
 
 function initAudio(){
@@ -1462,24 +1833,73 @@ function beginRun(sv){
   screen.classList.add("hide");
   screen.classList.remove("death");
   title.classList.remove("long");
+  paused = false;
+  pauseBox.classList.add("gone");
+  pauseBtn.classList.remove("gone");
   if (sv){
     P.hp = num(sv.hp,100); P.armor = num(sv.armor,0);
-    ammo = {bullets:num(sv.bullets,45), shells:num(sv.shells,10)};
+    ammo = {bullets:num(sv.bullets,45), shells:num(sv.shells,10), grenades:num(sv.grenades,0)};
+    const mask = num(sv.guns, 1) | 1;
+    unlocked = GUNS.map((g, i) => !!(mask & (1 << i)));
     gun = Math.min(GUNS.length-1, Math.max(0, num(sv.gun,0)|0));
+    if (!unlocked[gun]) gun = 0;
     kills = num(sv.kills,0); level = num(sv.level,1) - 1;
     runSeed = (num(sv.seed, runSeed) >>> 0) || runSeed;
     playing = true;
     nextLevel();
   } else {
     clearSave();
-    reset();
+    reset(parseSeed(seedIn.value));
     playing = true;
     saveGame();
   }
   try { if (DESKTOP) cv.requestPointerLock?.(); } catch(e){}
 }
 
+let paused = false;
+function setPause(v){
+  if (!playing) return;
+  paused = v;
+  pauseBox.classList.toggle("gone", !v);
+  pauseBtn.classList.toggle("gone", v);
+  if (v){
+    // сбрасываем все удержания, иначе после снятия паузы палец «залипает»
+    fireHeld = false; mouseHeld = false;
+    for (const k in keys) keys[k] = false;
+    stickId = null; lookId = null;
+    touch.fw = touch.st = 0; knob.style.transform = "";
+    document.getElementById("pauseinfo").textContent =
+      `Уровень ${level} · ${biome.name} · фрагов ${kills}`;
+    document.getElementById("pauseseed").textContent = `Семя: ${seedText()}`;
+    saveGame();
+    try { document.exitPointerLock?.(); } catch(e){}
+    AC?.suspend?.();
+  } else {
+    last = performance.now();      // иначе первый кадр после паузы придёт с огромным dt
+    AC?.resume?.();
+    try { if (DESKTOP) cv.requestPointerLock?.(); } catch(e){}
+  }
+}
+
+function quitToMenu(){
+  saveGame();
+  paused = false;
+  pauseBox.classList.add("gone");
+  pauseBtn.classList.add("gone");
+  playing = false;
+  screen.classList.remove("hide", "death");
+  title.innerHTML = TITLE0;
+  title.classList.remove("long");
+  msg.textContent = MSG0;
+  startBtn.textContent = "НАЧАТЬ";
+  try { document.exitPointerLock?.(); } catch(e){}
+  refreshScreen();
+}
+
 function gameOver(){
+  paused = false;
+  pauseBox.classList.add("gone");
+  pauseBtn.classList.add("gone");
   saveRecord();
   clearSave();
   playing = false;
@@ -1489,7 +1909,9 @@ function gameOver(){
   title.classList.add("long");
   msg.textContent = `Уровень ${level} · ${biome.name}. Фрагов: ${kills}. Семя подземелья: ${seedText()}.`;
   startBtn.textContent = "ЕЩЁ РАЗ";
+  const finished = seedText();
   refreshScreen();
+  seedIn.value = finished;      // «ЕЩЁ РАЗ» переиграет то же подземелье
   document.exitPointerLock?.();
 }
 
@@ -1511,6 +1933,16 @@ function onTap(el, fn){
 
 onTap(startBtn, () => beginRun(null));
 onTap(contBtn, () => beginRun(loadGame()));
+onTap(pauseBtn, () => setPause(true));
+onTap(seedCopy, () => copyText(seedIn.value || seedText(), seedCopy));
+onTap(pauseSeedBtn, () => copyText(seedText(), pauseSeedBtn));
+onTap(document.getElementById("resume"), () => setPause(false));
+onTap(document.getElementById("quit"), quitToMenu);
+
+addEventListener("keydown", e => {
+  const k = e.key.toLowerCase();
+  if (playing && (e.key === "Escape" || k === "p" || k === "з")) setPause(!paused);
+});
 
 /* ================= ввод ================= */
 let mouseHeld = false, fireHeld = false;
@@ -1520,6 +1952,7 @@ addEventListener("keydown", e => {
   if (k === "1") switchGun(0);
   if (k === "2") switchGun(1);
   if (k === "3") switchGun(2);
+  if (k === "4") switchGun(3);
   if (k === "q") switchGun(gun - 1);
   if (k === "e") switchGun(gun + 1);
   if (e.code === "Space") e.preventDefault();
@@ -1585,6 +2018,12 @@ swapBtn.addEventListener("touchstart", e => { switchGun(gun + 1); e.preventDefau
 const HAS_TOUCH = (navigator.maxTouchPoints || 0) > 0 || "ontouchstart" in window;
 const DESKTOP = matchMedia("(pointer:fine)").matches && !HAS_TOUCH;
 if (DESKTOP) document.body.classList.add("desktop");
+
+// семя из адреса: удобно кидать ссылкой
+try {
+  const fromUrl = parseSeed(location.hash);
+  if (fromUrl !== null) seedIn.value = location.hash.replace(/^#/, "").toUpperCase();
+} catch(e){}
 
 generateLevel(0);
 resize();
