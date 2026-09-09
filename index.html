@@ -34,6 +34,11 @@
   }
   #banner.show{opacity:1}
   #banner.surge{color:var(--blood)}
+  #lowhp{
+    position:absolute;inset:0;pointer-events:none;opacity:0;
+    background:radial-gradient(ellipse at center,
+      rgba(120,0,0,0) 42%, rgba(120,0,0,.5) 88%, rgba(90,0,0,.8) 100%);
+  }
   #banner span{display:block;font-size:13px;letter-spacing:2px;opacity:.85;margin-top:12px}
 
   #combo{
@@ -42,8 +47,15 @@
     text-shadow:0 2px 0 #000,0 0 18px #000;opacity:0;transition:opacity .2s;
   }
   #combo.show{opacity:1}
+  #face{
+    position:absolute;left:50%;transform:translateX(-50%);
+    bottom:calc(54px + env(safe-area-inset-bottom));
+    width:56px;height:67px;pointer-events:none;
+    image-rendering:-webkit-optimize-contrast;image-rendering:pixelated;
+    border:2px solid rgba(0,0,0,.55);background:rgba(10,7,6,.45);
+  }
   #buff{
-    position:absolute;left:0;right:0;bottom:calc(58px + env(safe-area-inset-bottom));
+    position:absolute;left:0;right:0;bottom:calc(128px + env(safe-area-inset-bottom));
     text-align:center;pointer-events:none;font-size:12px;letter-spacing:3px;
     color:var(--bone);text-shadow:0 2px 0 #000;
   }
@@ -56,6 +68,10 @@
   }
   #pausebtn:active{background:rgba(232,220,192,.3)}
 
+  #melt{
+    position:absolute;inset:0;width:100%;height:100%;z-index:6;pointer-events:none;
+    image-rendering:-webkit-optimize-contrast;image-rendering:pixelated;
+  }
   #pause{
     position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;
     align-items:center;justify-content:center;gap:18px;text-align:center;padding:24px;
@@ -170,8 +186,10 @@
 <div id="wrap">
   <canvas id="c"></canvas>
   <div id="hurt"></div>
+  <div id="lowhp"></div>
   <div id="banner"></div>
   <button id="pausebtn" class="gone" aria-label="Пауза">❚❚</button>
+  <canvas id="face" class="gone" width="40" height="48"></canvas>
   <div id="combo"></div>
   <div id="buff" class="gone"></div>
   <div id="pick"></div>
@@ -188,6 +206,8 @@
   <div id="stick"><div id="knob"></div></div>
   <div id="swap">СМЕНА</div>
   <div id="fire">ОГОНЬ</div>
+
+  <canvas id="melt" class="gone"></canvas>
 
   <div id="pause" class="gone">
     <h2>ПАУЗА</h2>
@@ -565,6 +585,93 @@ const WALL = {
   3:["#6b2320","#471614"]
 };
 
+/* Процедурные текстуры стен 64x64: кирпич, металл, бетон.
+   Для каждой — тёмная копия под боковые грани, как затенение сторон в Думе. */
+function texCanvas(){
+  const c = document.createElement("canvas"); c.width = c.height = 64;
+  return [c, c.getContext("2d")];
+}
+function darken(src, k){
+  const [c, g] = texCanvas();
+  g.drawImage(src, 0, 0);
+  g.globalCompositeOperation = "source-atop";
+  g.fillStyle = `rgba(0,0,0,${k})`;
+  g.fillRect(0, 0, 64, 64);
+  return c;
+}
+function noiseOver(g, amount, alpha){
+  for (let i=0;i<amount;i++){
+    const x = Math.random()*64, y = Math.random()*64;
+    g.fillStyle = `rgba(${Math.random()<.5?0:255},${Math.random()<.5?0:255},255,${alpha*Math.random()})`;
+    g.fillRect(x|0, y|0, 1 + (Math.random()*2|0), 1);
+  }
+}
+// кирпичная кладка
+function texBrick(base, mortar){
+  const [c, g] = texCanvas();
+  g.fillStyle = mortar; g.fillRect(0, 0, 64, 64);
+  const bh = 8;
+  for (let row=0; row<8; row++){
+    const off = (row % 2) * 16;
+    for (let bx=-32; bx<64; bx+=32){
+      const x = bx + off, y = row*bh;
+      g.fillStyle = base;
+      g.fillRect(x + 1, y + 1, 30, bh - 2);
+      g.fillStyle = "rgba(255,255,255,.07)";
+      g.fillRect(x + 1, y + 1, 30, 1);
+      g.fillStyle = "rgba(0,0,0,.22)";
+      g.fillRect(x + 1, y + bh - 2, 30, 1);
+    }
+  }
+  noiseOver(g, 260, .10);
+  return c;
+}
+// металлические панели с заклёпками
+function texMetal(base, dark){
+  const [c, g] = texCanvas();
+  g.fillStyle = base; g.fillRect(0, 0, 64, 64);
+  for (let y=0; y<64; y+=32){
+    g.fillStyle = dark; g.fillRect(0, y, 64, 3);
+    g.fillStyle = "rgba(255,255,255,.06)"; g.fillRect(0, y + 3, 64, 1);
+  }
+  g.fillStyle = dark; g.fillRect(30, 0, 3, 64);
+  for (let y=8; y<64; y+=16){
+    for (const x of [6, 24, 40, 58]){
+      g.fillStyle = "rgba(255,255,255,.16)"; g.fillRect(x, y, 3, 3);
+      g.fillStyle = "rgba(0,0,0,.35)"; g.fillRect(x + 1, y + 2, 2, 1);
+    }
+  }
+  noiseOver(g, 200, .09);
+  return c;
+}
+// бетон с потёками
+function texConcrete(base, dark){
+  const [c, g] = texCanvas();
+  g.fillStyle = base; g.fillRect(0, 0, 64, 64);
+  for (let i=0;i<14;i++){
+    const x = Math.random()*64, w = 2 + Math.random()*7, h = 8 + Math.random()*40;
+    g.fillStyle = `rgba(0,0,0,${.08 + Math.random()*.14})`;
+    g.fillRect(x|0, (Math.random()*20)|0, w|0, h|0);
+  }
+  g.strokeStyle = dark; g.lineWidth = 1;
+  for (let i=0;i<3;i++){
+    g.beginPath();
+    let x = Math.random()*64, y = 0;
+    g.moveTo(x, y);
+    while (y < 64){ x += (Math.random()*8 - 4); y += 6 + Math.random()*8; g.lineTo(x, y); }
+    g.stroke();
+  }
+  noiseOver(g, 320, .12);
+  return c;
+}
+
+const TEX = {
+  1:[texBrick("#63300f", "#2a1408")],
+  2:[texMetal("#4d5240", "#2b2f22")],
+  3:[texConcrete("#6d2a24", "#3a1210")]
+};
+for (const k in TEX) TEX[k][1] = darken(TEX[k][0], .34);   // грани, повёрнутые вбок
+
 /* ================= холст ================= */
 const cv = document.getElementById("c"), ctx = cv.getContext("2d", {alpha:false});
 let W = 0, H = 0, zbuf = null;
@@ -575,6 +682,7 @@ function resize(){
   cv.width = W; cv.height = H;
   zbuf = new Float32Array(W);
   ctx.imageSmoothingEnabled = false;
+  buildVignette();
 }
 addEventListener("resize", resize);
 
@@ -788,9 +896,9 @@ const ART = {
 const HITR = e => .48 * KIND[e.type].scale;
 
 const KIND = {
-  imp:    {hp:2, speed:1.70, dmg:9,  rate:.9,  melee:true,  reach:.85, art:"imp",    scale:1.0},
-  bull:   {hp:7, speed:1.00, dmg:17, rate:1.2, melee:true,  reach:1.05,art:"bull",   scale:1.35},
-  caster: {hp:3, speed:.8,   dmg:0,  rate:1.6, melee:false, reach:7.0, art:"caster", scale:1.1}
+  imp:    {hp:10, speed:1.70, dmg:9,  rate:.9,  melee:true,  reach:.85, art:"imp",    scale:1.0},
+  bull:   {hp:35, speed:1.00, dmg:17, rate:1.2, melee:true,  reach:1.05,art:"bull",   scale:1.35},
+  caster: {hp:15, speed:.8,   dmg:0,  rate:1.6, melee:false, reach:7.0, art:"caster", scale:1.1}
 };
 const FIREBALL_DMG = 13, FIREBALL_SPEED = 4.0;
 
@@ -824,7 +932,7 @@ const curve = () => ({
                       // первые этажи — тесная аудитория, там и половины хватает
                       * (level <= 3 ? .7 : 1)),
   // здоровье: имп до 7, бык до 19, маг до 9 — дальше не растёт никогда
-  hpBonus: type => Math.floor(ramp(type === "bull" ? 12 : type === "caster" ? 6 : 5, .55)),
+  hpBonus: type => Math.floor(ramp(type === "bull" ? 60 : type === "caster" ? 30 : 25, .55)),
   // состав отряда смещается к тяжёлым, но импы не исчезают
   bulls:   level >= 2 ? .12 + ramp(.28, .4) : 0,
   casters: level >= 3 ? .08 + ramp(.26, .4) + (isSurge() ? .08 : 0) : 0,
@@ -833,8 +941,8 @@ const curve = () => ({
                         : Math.max(2, 4 - Math.floor((depth() - 40)/50)),
   bullets: Math.min(4, 1 + Math.floor(level/3)),
   shells:  Math.min(3, 1 + Math.floor(level/4)),
-  bulletAmt: 22 + Math.min(10, Math.floor(depth()/15)),
-  shellAmt:  5 + Math.min(4, Math.floor(depth()/30)),
+  bulletAmt: 30 + Math.min(14, Math.floor(depth()/12)),
+  shellAmt:  6 + Math.min(4, Math.floor(depth()/30)),
   dropChance: .3 + Math.min(.12, depth()*.0008),
   levelHeal: Math.max(6, 15 - Math.floor(depth()/25))
 });
@@ -852,21 +960,111 @@ const CANVAS_FILTER = (() => {
 
 /* ================= звук ================= */
 let AC = null;
-function beep(type, f0, dur, vol, f1){
+/* Шумовой импульс: дробовик и взрыв на осцилляторе звучали как писк,
+   а в оригинале это широкополосный треск. */
+let noiseBuf = null;
+function noiseBurst(dur, vol, freq, q, pan){
+  if (!AC) return;
+  if (!noiseBuf){
+    noiseBuf = AC.createBuffer(1, AC.sampleRate * 1.2, AC.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i=0;i<d.length;i++) d[i] = Math.random()*2 - 1;
+  }
+  const src = AC.createBufferSource(); src.buffer = noiseBuf;
+  const flt = AC.createBiquadFilter();
+  flt.type = "lowpass";
+  flt.frequency.setValueAtTime(freq, AC.currentTime);
+  flt.frequency.exponentialRampToValueAtTime(Math.max(60, freq*.15), AC.currentTime + dur);
+  flt.Q.value = q || 1;
+  const g = AC.createGain();
+  g.gain.setValueAtTime(vol, AC.currentTime);
+  g.gain.exponentialRampToValueAtTime(.001, AC.currentTime + dur);
+  src.connect(flt); flt.connect(g); g.connect(outNode(pan));
+  src.start(); src.stop(AC.currentTime + dur);
+}
+
+/* ---- атмосферный звук ----
+   Постоянный низкий гул, случайные капли и рычание в темноте, сердцебиение
+   на низком здоровье. Пугает не картинка, а то, что слышно раньше, чем видно. */
+let drone = null, droneGain = null;
+function setDrone(v){ if (droneGain) droneGain.gain.value = v; }
+function startDrone(){
+  if (!AC || drone) return;
+  drone = AC.createOscillator();
+  const sub = AC.createOscillator();
+  droneGain = AC.createGain();
+  const flt = AC.createBiquadFilter();
+  drone.type = "sawtooth"; drone.frequency.value = 41;
+  sub.type = "sine"; sub.frequency.value = 27;
+  flt.type = "lowpass"; flt.frequency.value = 160;
+  droneGain.gain.value = .05;
+  drone.connect(flt); sub.connect(flt); flt.connect(droneGain); droneGain.connect(AC.destination);
+  drone.start(); sub.start();
+}
+
+let ambT = 4, heartT = 0;
+function ambience(dt){
+  if (!AC) return;
+  ambT -= dt;
+  if (ambT <= 0){
+    ambT = 5 + Math.random()*11;
+    const r = Math.random();
+    if (r < .35) beep("sine", 900 + Math.random()*500, .12, .05, 200);        // капля
+    else if (r < .7) beep("sawtooth", 60 + Math.random()*40, 1.1, .05, 32);   // далёкий рёв
+    else noiseBurst(.9, .05, 500, .6);                                        // шорох
+  }
+  // рваное дыхание на исходе сил
+  if (P.hp < 28 && playing){
+    gaspT -= dt;
+    if (gaspT <= 0){
+      gaspT = 1.1 + Math.random()*.6;
+      noiseBurst(.3, .09, 700, .6);
+      setTimeout(() => noiseBurst(.22, .06, 480, .6), 330);
+    }
+  }
+  // сердце колотится тем чаще, чем хуже дела
+  if (P.hp < 40 && playing){
+    heartT -= dt;
+    if (heartT <= 0){
+      heartT = .45 + (P.hp/40)*.55;
+      beep("sine", 62, .14, .16, 40);
+      setTimeout(() => beep("sine", 55, .12, .11, 38), 150);
+    }
+  }
+}
+
+function outNode(pan){
+  if (!AC) return null;
+  if (!pan || !AC.createStereoPanner) return AC.destination;
+  const p = AC.createStereoPanner();
+  p.pan.value = Math.max(-1, Math.min(1, pan));
+  p.connect(AC.destination);
+  return p;
+}
+
+// звук врага: громкость падает с расстоянием, панорама — от угла к взгляду
+function atPos(x, y){
+  const dx = x - P.x, dy = y - P.y;
+  const d = Math.hypot(dx, dy);
+  const rel = angleDiff(Math.atan2(dy, dx), P.a);
+  return {vol: Math.max(0, 1 - d/14), pan: Math.sin(rel), d};
+}
+
+function beep(type, f0, dur, vol, f1, pan){
   if (!AC) return;
   const o = AC.createOscillator(), g = AC.createGain();
   o.type = type; o.frequency.setValueAtTime(f0, AC.currentTime);
   o.frequency.exponentialRampToValueAtTime(Math.max(25, f1 ?? f0*.25), AC.currentTime + dur);
   g.gain.setValueAtTime(vol, AC.currentTime);
   g.gain.exponentialRampToValueAtTime(.001, AC.currentTime + dur);
-  o.connect(g); g.connect(AC.destination); o.start(); o.stop(AC.currentTime + dur);
+  o.connect(g); g.connect(outNode(pan)); o.start(); o.stop(AC.currentTime + dur);
 }
 
 /* ================= оружие ================= */
 const GUNS = [
-  {name:"ПИСТОЛЕТ", cd:.32, dmg:1, pellets:1, spread:.01,  ammo:null,     snd:[420,.1,.18]},
-  {name:"ДРОБОВИК", cd:.85, dmg:2, pellets:5, spread:.085, ammo:"shells", snd:[150,.22,.3]},
-  {name:"ПУЛЕМЁТ",  cd:.09, dmg:1, pellets:1, spread:.03,  ammo:"bullets",snd:[520,.06,.12]},
+  {name:"ПИСТОЛЕТ", cd:.32, dmg:5, pellets:1, spread:.01,  ammo:null,     snd:[420,.1,.18]},
+  {name:"ДРОБОВИК", cd:.85, dmg:10,pellets:5, spread:.085, ammo:"shells", snd:[150,.22,.3]},
+  {name:"ПУЛЕМЁТ",  cd:.115,dmg:3, pellets:1, spread:.055, ammo:"bullets",snd:[520,.06,.12]},
   {name:"ГРАНАТОМЁТ", cd:1.0, dmg:0, pellets:0, spread:0, ammo:"grenades", snd:[95,.28,.34], launcher:true}
 ];
 // Стволы теперь находятся, а не выдаются сразу: первые уровни есть за что играть.
@@ -920,7 +1118,7 @@ function saveRecord(){
 }
 
 /* ================= состояние ================= */
-const P = {x:2.5, y:2.5, a:0, hp:100, armor:0, hurt:0, pick:0, inv:0};
+const P = {x:2.5, y:2.5, a:0, hp:100, armor:0, hurt:0, pick:0, inv:0, hitDir:0, hitT:0};
 // Усилители появляются с 4-го уровня — на первых они бы съели и без того простую сложность.
 const BUFFS = {
   rage:  {name:"ЯРОСТЬ",    time:15, color:"#c8321e"},
@@ -935,7 +1133,30 @@ const INV_TIME = .45;   // окно неуязвимости после попа
 let enemies = [], items = [], shots = [];
 let ammo = {bullets:45, shells:10, grenades:0};
 let gun = 0, kills = 0, level = 0, enemiesLeft = 0;
-let playing = false, flash = 0, recoil = 0, cooldown = 0;
+let playing = false, flash = 0, recoil = 0, cooldown = 0, bobPhase = 0;
+/* ---- освещение и его сбои ---- */
+let lightBase = 1;        // базовая яркость этажа
+let lightNow = 1;         // с учётом мигания
+let flickerT = 0, flickerLeft = 0, darkLevel = false;
+let backT = 0;              // «кто-то за спиной»: тьма наползает с краёв
+
+function updateLight(dt){
+  flickerT -= dt;
+  if (flickerLeft > 0){
+    flickerLeft -= dt;
+    // рваное мигание, как в неисправной лампе
+    lightNow = lightBase * (Math.random() < .55 ? .18 + Math.random()*.2 : 1);
+    if (flickerLeft <= 0) lightNow = lightBase;
+  } else if (flickerT <= 0){
+    flickerT = darkLevel ? 2.5 + Math.random()*4.5 : 6 + Math.random()*12;
+    flickerLeft = darkLevel ? .45 + Math.random()*1.1 : .3 + Math.random()*.6;
+    if (AC) noiseBurst(.12, .05, 3000, 1);          // щелчок лампы
+  } else {
+    lightNow += (lightBase - lightNow) * Math.min(1, dt*8);
+  }
+  // вспышка выстрела на мгновение разгоняет темноту
+  if (flash > .05) lightNow = Math.max(lightNow, Math.min(1.15, lightBase + flash*.7));
+}
 const keys = {};
 
 function freeCell(minDist){
@@ -954,6 +1175,48 @@ function freeCell(minDist){
   return {x:2.5, y:2.5};
 }
 
+/* Расплавление экрана при смерти — фирменный переход оригинала:
+   кадр стекает вниз полосами, открывая экран смерти под собой. */
+const meltCv = document.getElementById("melt");
+const mctx = meltCv.getContext("2d");
+let meltCols = null, meltFrozen = null;
+
+function startMelt(){
+  if (!W || !H) return;
+  if (!meltFrozen) meltFrozen = document.createElement("canvas");
+  meltFrozen.width = W; meltFrozen.height = H;
+  meltFrozen.getContext("2d").drawImage(cv, 0, 0);
+  meltCv.width = W; meltCv.height = H;
+  const strip = Math.max(2, Math.round(W/70));
+  meltCols = [];
+  let y = -Math.random()*10;
+  for (let x=0; x<W; x+=strip){
+    y = Math.min(0, Math.max(-22, y + (Math.random()*8 - 4)));
+    meltCols.push({x, w:Math.min(strip, W-x), y, v:0, delay:Math.random()*.3});
+  }
+  meltCv.classList.remove("gone");
+}
+
+function stopMelt(){
+  meltCols = null;
+  meltCv.classList.add("gone");
+}
+
+function meltStep(dt){
+  mctx.clearRect(0, 0, W, H);
+  let done = true;
+  for (const c of meltCols){
+    if (c.delay > 0){ c.delay -= dt; done = false; }
+    else { c.v += 420*dt; c.y += c.v*dt; }
+    if (c.y < H){
+      done = false;
+      mctx.drawImage(meltFrozen, c.x, 0, c.w, H, c.x, c.y, c.w, H);
+    }
+  }
+  if (done) stopMelt();
+}
+
+let stepAcc = 0, gaspT = 0;
 let bannerT = null;
 function showBanner(text, surge, sub){
   const b = document.getElementById("banner");
@@ -1002,7 +1265,8 @@ function nextLevel(){
       t:Math.random()*10, cd:Math.random()*1.5 + .5, deadT:0,
       // потолок 1.28 от базовой: враг не должен обгонять игрока
       speed:Math.min(k.speed + level*.03, k.speed*1.28),
-      stuck:0, slideT:0, slideDir:1
+      stuck:0, slideT:0, slideDir:1, seen:false, hurtT:0,
+      voiceT:2 + Math.random()*5, breathT:0
     });
   }
   enemiesLeft = enemies.length;
@@ -1039,12 +1303,23 @@ function nextLevel(){
     }
   }
   beep("sine", 300, .5, .12, 600);
+  if (C.surge){
+    // перед прорывом гул обрывается, а потом бьёт низом — пауза страшнее шума
+    setDrone(0);
+    setTimeout(() => { beep("sine", 44, 1.6, .3, 24); noiseBurst(1.2, .18, 260, .8); setDrone(.05); }, 900);
+  }
   showBanner((C.surge ? `ПРОРЫВ · УРОВЕНЬ ${level}` : `УРОВЕНЬ ${level}`) + ` · ${biome.name}`,
              C.surge, [grade, gunHint].filter(Boolean).join(" · "));
+  // освещение этажа: изредка попадается почти полностью тёмный
+  darkLevel = level > 2 && Math.random() < .3;
+  lightBase = darkLevel ? .42 + Math.random()*.12 : .8 + Math.random()*.28;
+  lightNow = lightBase;
+  flickerT = 2; flickerLeft = 0;
   stat = {fired:0, hit:0, t:0, n:enemies.length};
   combo = 0; comboT = 0;
   document.getElementById("combo").classList.remove("show");
   grenades.length = 0; booms.length = 0;
+  wpnSeq = null; wpnFrame = 0; wpnOffset = 0; wpnSwitch = -1;
   updateHUD();
   saveGame();
 }
@@ -1214,12 +1489,14 @@ function registerKill(){
 function damageEnemy(e, dmg){
   if (!e.alive) return;
   e.hp -= dmg;
+  e.hurtT = .11;                 // короткая засветка попадания
   if (e.hp > 0){ beep("triangle", 320, .07, .1); return; }
   e.alive = false; e.deadT = 0; e.bloodT = 2.6;
   registerKill();
   const dry = ammo.bullets < 12 && ammo.shells < 3;
   if (dry || Math.random() < curve().dropChance){
-    items.push({kind: Math.random() < .5 ? "bullets" : "medkit", x:e.x, y:e.y, t:0});
+    const r = Math.random();
+    items.push({kind: r < .38 ? "bullets" : r < .62 ? "shells" : "medkit", x:e.x, y:e.y, t:0});
   }
 }
 
@@ -1248,25 +1525,29 @@ const grenades = [], booms = [];
 function explode(x, y){
   booms.push({x, y, t:0});
   beep("sawtooth", 70, .4, .3, 40);
+  noiseBurst(.55, .4, 1400, .7);
   flash = 1;
-  const R = 2.4, D = 7 * (buff === "rage" ? 2 : 1);
+  const R = 2.4, D = 35 * (buff === "rage" ? 2 : 1);
   for (const e of enemies){
     if (!e.alive) continue;
     const d = Math.hypot(e.x - x, e.y - y);
     if (d > R) continue;
-    damageEnemy(e, Math.max(2, Math.round(D * (1 - d/R*.7))));
+    damageEnemy(e, Math.max(10, Math.round(D * (1 - d/R*.7))));
   }
   const pd = Math.hypot(P.x - x, P.y - y);
-  if (pd < 1.9) damagePlayer(Math.round(14 * (1 - pd/1.9)));   // своей же гранатой тоже прилетит
+  if (pd < 1.9) damagePlayer(Math.round(14 * (1 - pd/1.9)), x, y);   // своей же гранатой тоже прилетит
 }
 
 function shoot(){
-  if (cooldown > 0 || !playing) return;
+  if (cooldown > 0 || !playing || wpnSwitch !== -1) return;
   const g = GUNS[gun];
   if (g.ammo && ammo[g.ammo] <= 0){ beep("square", 90, .08, .07); cooldown = .3; return; }
   if (g.ammo) ammo[g.ammo]--;
   cooldown = g.cd; recoil = 1; flash = 1;
   beep("square", g.snd[0], g.snd[1], g.snd[2]);
+  if (gun === 1) noiseBurst(.3, .35, 2600, 1);          // дробовик
+  else if (g.launcher) noiseBurst(.2, .3, 900, 1);
+  playFireAnim();
   const mult = buff === "rage" ? 2 : 1;
   if (g.launcher){
     stat.fired++;
@@ -1286,10 +1567,7 @@ function switchGun(n){
   const dir = n < gun ? -1 : 1;
   let i = ((n % N) + N) % N;
   for (let k=0; k<N && !unlocked[i]; k++) i = ((i + dir) % N + N) % N;
-  if (!unlocked[i] || i === gun) return;
-  gun = i;
-  updateHUD();
-  beep("sine", 700, .05, .07);
+  equip(i);                       // смена идёт через опускание и подъём ствола
 }
 
 function canSee(e){
@@ -1305,8 +1583,14 @@ function canSee(e){
 }
 
 /* ================= шаг мира ================= */
-function damagePlayer(amount){
+function damagePlayer(amount, sx, sy){
   if (P.inv > 0 || buff === "shield") return;
+  // куда повернуть лицо: удар слева, справа или в лоб
+  if (sx !== undefined){
+    const rel = angleDiff(Math.atan2(sy - P.y, sx - P.x), P.a);
+    P.hitDir = Math.abs(rel) < .6 ? 0 : (rel < 0 ? -1 : 1);
+  } else P.hitDir = 0;
+  P.hitT = .45;   // столько же, сколько неуязвимость: лицо не залипает в гримасе
   P.inv = INV_TIME;
   if (P.armor > 0){
     const absorbed = Math.min(P.armor, amount * .45);
@@ -1334,7 +1618,16 @@ function update(dt){
   if (fw || st){
     const len = Math.hypot(fw, st) || 1;
     const f = fw/len, s = st/len;
+    const bx = P.x, by = P.y;
     move((Math.cos(P.a)*f - Math.sin(P.a)*s)*sp, (Math.sin(P.a)*f + Math.cos(P.a)*s)*sp);
+    const walked = Math.hypot(P.x - bx, P.y - by);
+    bobPhase += walked * 5.2;
+    // Шаги: в тишине собственные шаги делают паузы между ними громче.
+    stepAcc += walked;
+    if (stepAcc > 1.35){
+      stepAcc = 0;
+      noiseBurst(.07, .05, 260, .8, (Math.random()*2 - 1)*.3);
+    }
   }
 
   if (keys[" "] || mouseHeld || fireHeld) shoot();
@@ -1345,6 +1638,15 @@ function update(dt){
   P.hurt = Math.max(0, P.hurt - dt*2);
   P.inv = Math.max(0, P.inv - dt);
   clock += dt; stat.t += dt;
+  updateLight(dt);
+  updateWeapon(dt);
+  if (backT > 0) backT -= dt;
+  ambience(dt);
+  updateFace(dt);
+  // красная пульсация по краям, когда здоровья мало
+  const low = P.hp < 40 ? (1 - P.hp/40) : 0;
+  document.getElementById("lowhp").style.opacity =
+    low ? (low * (.45 + .3*Math.sin(clock*6))).toFixed(2) : 0;
 
   if (comboT > 0){
     comboT -= dt;
@@ -1393,6 +1695,7 @@ function update(dt){
 
   let aliveLeft = 0;
   for (const e of enemies){
+    if (e.hurtT > 0) e.hurtT -= dt;
     if (!e.alive){ e.deadT += dt; continue; }
     aliveLeft++;
     e.t += dt; e.cd -= dt;
@@ -1404,6 +1707,34 @@ function update(dt){
     // Видит игрока — прёт напрямую; не видит — идёт по волне в обход стен.
     let mx = ux, my = uy;
     const sees = canSee(e);
+    // враг замечает игрока и рычит — звук раньше встречи
+    if (sees && !e.seen && d < 13){
+      e.seen = true;
+      const a = atPos(e.x, e.y);
+      const f = k.melee ? (e.type === "bull" ? 90 : 150) : 220;
+      beep("sawtooth", f, .35, .14*a.vol, f*.4, a.pan);
+      noiseBurst(.3, .11*a.vol, 700, .8, a.pan);
+    }
+    // и продолжает подавать голос, пока бродит рядом
+    e.voiceT = (e.voiceT || 2 + Math.random()*4) - dt;
+    if (e.voiceT <= 0 && d < 13){
+      e.voiceT = 3 + Math.random()*5;
+      const a = atPos(e.x, e.y);
+      const f = e.type === "bull" ? 62 : e.type === "caster" ? 190 : 120;
+      beep("sawtooth", f, .5, .07*a.vol, f*.55, a.pan);
+      if (e.type === "bull") noiseBurst(.4, .05*a.vol, 320, .7, a.pan);
+    }
+    // совсем рядом и за спиной — дыхание в затылок
+    // dx,dy в этом цикле смотрят от врага к игроку, поэтому здесь знак обратный
+    if (d < 2.8 && Math.abs(angleDiff(Math.atan2(-dy, -dx), P.a)) > 1.1){
+      e.breathT = (e.breathT || 0) - dt;
+      if (e.breathT <= 0){
+        e.breathT = .8 + Math.random()*.5;
+        const a = atPos(e.x, e.y);
+        noiseBurst(.35, .12, 420, .5, a.pan);
+        backT = .5;
+      }
+    }
     if (!sees || d > 3){
       const f = flowDir(e);
       if (f){ mx = f.x; my = f.y; }
@@ -1414,7 +1745,7 @@ function update(dt){
       if (d > k.reach){ wx = mx; wy = my; wantMove = true; }
       else if (e.cd <= 0 && sees){
         e.cd = k.rate * rateMul();
-        damagePlayer(k.dmg + dmgBonus());
+        damagePlayer(k.dmg + dmgBonus(), e.x, e.y);
       }
     } else {
       const want = 4.5;
@@ -1488,7 +1819,7 @@ function update(dt){
     const ox = b.x, oy = b.y;
     b.x += b.vx*dt; b.y += b.vy*dt;
     if (segDist(P.x, P.y, ox, oy, b.x, b.y) < PR + .18){
-      b.dead = true; damagePlayer(FIREBALL_DMG + dmgBonus());
+      b.dead = true; damagePlayer(FIREBALL_DMG + dmgBonus(), b.x, b.y);
     } else if (solid(b.x, b.y, .1) || cell(b.x, b.y)) b.dead = true;
     if (b.t > 6) b.dead = true;
   }
@@ -1507,7 +1838,8 @@ function update(dt){
     else if (it.kind === "grenades") ammo.grenades += 3;
     else if (GUN_OF[it.kind] !== undefined){
       const n = GUN_OF[it.kind];
-      unlocked[n] = true; gun = n;
+      unlocked[n] = true;
+      if (wpnSwitch === -1){ wpnSwitch = n; wpnSeq = null; }   // ствол сам поднимется в руки
       if (n === 1) ammo.shells += 8;
       if (n === 2) ammo.bullets += 30;
       if (n === 3) ammo.grenades += 5;
@@ -1535,13 +1867,19 @@ function update(dt){
 function render(){
   const dirX = Math.cos(P.a), dirY = Math.sin(P.a);
   const planeX = -dirY*.66, planeY = dirX*.66;
-  const horizon = H*.5;
+  // Кадр ведёт при низком здоровье и в момент удара — по вертикали,
+  // на прицеливание это не влияет.
+  const shakeAmp = (P.hp < 45 ? (1 - P.hp/45)*2.2 : 0) + (P.hitT > 0 ? P.hitT*9 : 0);
+  const horizon = H*.5 + (shakeAmp ? Math.sin(clock*17)*shakeAmp + (Math.random()-.5)*shakeAmp*.6 : 0);
 
+  const L = lightNow;
+  const mix = (a, b, t) => Math.round(a + (b - a)*t);
+  const dim = (r, gg, b, k) => `rgb(${mix(0,r,k)},${mix(0,gg,k)},${mix(0,b,k)})`;
   let g = ctx.createLinearGradient(0,0,0,horizon);
-  g.addColorStop(0,"#100a14"); g.addColorStop(1,"#2b1d22");
+  g.addColorStop(0, dim(16,10,20, L*.5)); g.addColorStop(1, dim(43,29,34, L));
   ctx.fillStyle = g; ctx.fillRect(0,0,W,horizon);
   g = ctx.createLinearGradient(0,horizon,0,H);
-  g.addColorStop(0,"#241a15"); g.addColorStop(1,"#4a382c");
+  g.addColorStop(0, dim(36,26,21, L*.55)); g.addColorStop(1, dim(74,56,44, L));
   ctx.fillStyle = g; ctx.fillRect(0,horizon,W,H-horizon);
 
   for (let x=0; x<W; x++){
@@ -1563,14 +1901,31 @@ function render(){
     const lh = H / zbuf[x];
     const y0 = Math.max(0, horizon - lh/2);
     const y1 = Math.min(H, horizon + lh/2);
-    const pal = WALL[hit] || WALL[1];
-    ctx.fillStyle = pal[side];
-    ctx.fillRect(x, y0, 1, y1-y0);
-    const fog = Math.min(.8, zbuf[x]/14);
+
+    // точка попадания вдоль стены -> колонка текстуры
+    let wallX = side === 0 ? P.y + dist*rdy : P.x + dist*rdx;
+    wallX -= Math.floor(wallX);
+    let texX = (wallX*64) | 0;
+    if ((side === 0 && rdx > 0) || (side === 1 && rdy < 0)) texX = 63 - texX;
+    const tex = (TEX[hit] || TEX[1])[side];
+    ctx.drawImage(tex, texX, 0, 1, 64, x, horizon - lh/2, 1, lh);
+    // Свет гаснет заметно быстрее и глубже — дальше 8-9 клеток почти ничего.
+    const fog = Math.min(.97, Math.pow(zbuf[x]/(7.2*lightNow), 1.35) * .93);
     if (fog > .02){
-      ctx.fillStyle = `rgba(10,6,8,${fog})`;
+      ctx.fillStyle = `rgba(6,4,6,${fog.toFixed(3)})`;
       ctx.fillRect(x, y0, 1, y1-y0);
     }
+  }
+
+  // Вспышка выстрела подсвечивает комнату: без этого стрельба выглядит плоско.
+  if (flash > .04){
+    const gr = ctx.createLinearGradient(0, horizon - H*.5, 0, H);
+    gr.addColorStop(0, `rgba(255,190,90,0)`);
+    gr.addColorStop(1, `rgba(255,190,90,${(flash*.18).toFixed(3)})`);
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = gr;
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = "source-over";
   }
 
   const list = [];
@@ -1580,6 +1935,8 @@ function render(){
     list.push({
       x:e.x, y:e.y,
       img: dead ? ART.corpse[e.type] : ART[k.art][(e.t*4|0) % 2],
+      hurt: !dead && e.hurtT > 0,
+      eyes: !dead && e.seen,
       scale: dead ? k.scale * .92 : k.scale,
       yOff: dead ? (.24 + Math.min(.18, e.deadT*.55)) : 0,
       dead, deadT: e.deadT
@@ -1621,7 +1978,7 @@ function render(){
     const y0 = horizon - sh/2 + o.yOff*Math.abs(H/o.ty);
     const x0 = screenX - sw/2;
 
-    const bright = Math.max(.25, 1 - o.ty/13);
+    const bright = Math.max(.05, (1 - o.ty/(8.2*lightNow)) * lightNow);
     sctx.clearRect(0,0,64,64);
     sctx.save();
     sctx.globalAlpha = o.boom ? Math.max(0, 1 - o.boomT/.45)
@@ -1650,6 +2007,12 @@ function render(){
       sctx.fillRect(0, 0, 64, 64);
       sctx.globalCompositeOperation = "source-over";
     }
+    if (o.hurt){
+      sctx.globalCompositeOperation = "source-atop";
+      sctx.fillStyle = "rgba(255,235,220,.55)";
+      sctx.fillRect(0, 0, 64, 64);
+      sctx.globalCompositeOperation = "source-over";
+    }
     sctx.filter = "none";
     sctx.globalAlpha = 1;
 
@@ -1659,6 +2022,43 @@ function render(){
       const texX = Math.min(63, Math.max(0, ((x - x0) * 64 / sw) | 0));
       ctx.drawImage(shade, texX, 0, 1, 64, x, y0, 1, sh);
     }
+
+    /* Глаза в темноте. Если тварь уже утонула во мраке, но смотрит на тебя,
+       остаются гореть две точки — видно, что там кто-то есть, но не видно кто. */
+    if (o.eyes && bright < .4 && o.ty < 17){
+      const col = screenX | 0;
+      if (col >= 0 && col < W && o.ty < zbuf[col]){
+        const ew = Math.max(1, sh*.055), eh = Math.max(1, sh*.04);
+        const ey = y0 + sh*.46;   // уровень глаз на спрайте
+        const glow = Math.min(.95, (.34 - bright)*3.2) * (.75 + .25*Math.sin(clock*9 + o.x));
+        ctx.globalCompositeOperation = "lighter";
+        ctx.fillStyle = `rgba(190,30,20,${glow.toFixed(2)})`;
+        ctx.fillRect(screenX - sh*.17, ey, ew, eh);
+        ctx.fillRect(screenX + sh*.17 - ew, ey, ew, eh);
+        ctx.globalCompositeOperation = "source-over";
+      }
+    }
+  }
+
+  // виньетка рисуется в холсте до миникарты — иначе она гасила бы и карту
+  if (VIGN){ ctx.fillStyle = VIGN; ctx.fillRect(0, 0, W, H); }
+
+  // Кто-то дышит в спину: края кадра наливаются чернотой.
+  if (backT > 0){
+    const k = Math.min(1, backT*2);
+    const gr = ctx.createLinearGradient(0, 0, W, 0);
+    gr.addColorStop(0, `rgba(0,0,0,${(k*.75).toFixed(2)})`);
+    gr.addColorStop(.42, "rgba(0,0,0,0)");
+    gr.addColorStop(.58, "rgba(0,0,0,0)");
+    gr.addColorStop(1, `rgba(0,0,0,${(k*.75).toFixed(2)})`);
+    ctx.fillStyle = gr; ctx.fillRect(0, 0, W, H);
+  }
+
+  // зерно: лёгкий шум поверх кадра, картинка перестаёт быть стерильной
+  if (GRAIN){
+    ctx.globalAlpha = .05 + (1 - lightNow)*.05;
+    ctx.drawImage(GRAIN, -(Math.random()*64|0), -(Math.random()*64|0), W + 64, H + 64);
+    ctx.globalAlpha = 1;
   }
 
   drawLastMarkers(horizon);
@@ -1666,32 +2066,365 @@ function render(){
   drawMinimap();
 }
 
-function drawGun(){
-  const bob = Math.sin(performance.now()/170)*3;
-  const base = H - recoil*H*.07 + bob;
-  const cx = W/2;
-  if (gun === 0){
-    ctx.fillStyle = "#2b2b30"; ctx.fillRect(cx-8, base-H*.20, 16, H*.20);
-    ctx.fillStyle = "#3d3d45"; ctx.fillRect(cx-8, base-H*.20, 5, H*.20);
-    ctx.fillStyle = "#4a2a12"; ctx.fillRect(cx-12, base-H*.09, 24, H*.09);
-  } else if (gun === 1){
-    ctx.fillStyle = "#2b2b30"; ctx.fillRect(cx-15, base-H*.30, 30, H*.30);
-    ctx.fillStyle = "#3d3d45"; ctx.fillRect(cx-15, base-H*.30, 9, H*.30);
-    ctx.fillStyle = "#4a2a12"; ctx.fillRect(cx-22, base-H*.14, 44, H*.09);
-    ctx.fillStyle = "#6b3d1c"; ctx.fillRect(cx-22, base-H*.14, 44, 4);
-  } else {
-    ctx.fillStyle = "#2b2b30"; ctx.fillRect(cx-18, base-H*.26, 36, H*.26);
-    ctx.fillStyle = "#55555f";
-    for (let i=0;i<3;i++) ctx.fillRect(cx-16 + i*12, base-H*.34, 8, H*.10);
-    ctx.fillStyle = "#3a3a42"; ctx.fillRect(cx-24, base-H*.12, 48, H*.08);
+/* ================= лицо ученика =================
+   В оригинале в статус-баре живёт морда героя и отыгрывает состояние.
+   Здесь вместо неё — ученик: получает по щам, потеет на низком здоровье,
+   лыбится на серии и звереет под усилителем. */
+const faceCv = document.getElementById("face");
+const fctx = faceCv.getContext("2d");
+let faceKey = "", blinkT = 0, blinking = false;
+
+function facePart(x, y, w, h, color){ fctx.fillStyle = color; fctx.fillRect(x, y, w, h); }
+
+function paintFace(st){
+  const skin = st.mood === "rage" ? "#d98a5c" : "#d8a06a";
+  fctx.clearRect(0, 0, 40, 48);
+
+  // ворот куртки
+  facePart(4, 40, 32, 8, "#2f3a55");
+  facePart(14, 40, 12, 4, "#c9c0a8");
+  // шея и голова
+  facePart(15, 34, 10, 8, "#b8834f");
+  facePart(7, 6, 26, 32, skin);
+  facePart(5, 16, 2, 8, skin); facePart(33, 16, 2, 8, skin);   // уши
+  // волосы: короткая стрижка с чёлкой
+  facePart(6, 3, 28, 8, "#3a2a1c");
+  facePart(6, 11, 5, 4, "#3a2a1c"); facePart(29, 11, 5, 4, "#3a2a1c");
+  for (let i=0;i<5;i++) facePart(9 + i*5, 10, 3, 3, "#3a2a1c");
+
+  const d = st.dir;                       // -1 влево, 0 прямо, 1 вправо
+  const ex = 12 + d*2, ex2 = 23 + d*2;
+
+  if (st.mood === "dead"){
+    facePart(11, 18, 7, 2, "#20140c"); facePart(22, 18, 7, 2, "#20140c");
+    facePart(13, 16, 3, 6, "#20140c"); facePart(24, 16, 3, 6, "#20140c");
+    facePart(14, 30, 12, 5, "#3a1010");
+    facePart(7, 6, 26, 6, "#8e1f14");
+    facePart(20, 12, 4, 22, "rgba(142,31,20,.85)");
+    return;
   }
+
+  // глаза
+  const eyeH = st.mood === "haste" ? 7 : (blinking ? 1 : 5);
+  facePart(ex, 18, 6, eyeH, "#f2ece0");
+  facePart(ex2, 18, 6, eyeH, "#f2ece0");
+  if (!blinking){
+    const pupil = st.mood === "rage" ? "#8e1f14" : "#20140c";
+    facePart(ex + 2 + d, 19, 2, Math.max(2, eyeH - 2), pupil);
+    facePart(ex2 + 2 + d, 19, 2, Math.max(2, eyeH - 2), pupil);
+  }
+
+  // брови
+  if (st.mood === "rage" || st.mood === "hurt"){
+    facePart(11, 14, 7, 3, "#3a2a1c"); facePart(22, 14, 7, 3, "#3a2a1c");
+    facePart(11, 16, 3, 2, "#3a2a1c"); facePart(26, 16, 3, 2, "#3a2a1c");
+  } else if (st.mood === "gloat"){
+    facePart(11, 13, 7, 2, "#3a2a1c"); facePart(22, 13, 7, 2, "#3a2a1c");
+  } else {
+    facePart(11, 14, 7, 2, "#3a2a1c"); facePart(22, 14, 7, 2, "#3a2a1c");
+  }
+
+  // нос
+  facePart(19, 22, 3, 6, "#b8834f");
+
+  // рот
+  if (st.mood === "gloat"){
+    facePart(13, 30, 14, 3, "#20140c");
+    facePart(15, 33, 10, 2, "#f2ece0");
+    facePart(11, 28, 2, 3, "#20140c"); facePart(27, 28, 2, 3, "#20140c");
+  } else if (st.mood === "hurt"){
+    facePart(13, 30, 14, 5, "#20140c");
+    facePart(15, 31, 10, 2, "#f2ece0");
+  } else if (st.mood === "rage"){
+    facePart(12, 30, 16, 4, "#20140c");
+    for (let i=0;i<4;i++) facePart(14 + i*4, 30, 2, 2, "#f2ece0");
+  } else if (st.mood === "haste"){
+    facePart(16, 30, 8, 5, "#20140c");
+  } else {
+    facePart(14, 31, 12, 2, "#20140c");
+  }
+
+  // кровь по мере потери здоровья
+  const lvl = st.blood;
+  const spots = [[10,24],[28,20],[13,12],[26,28],[9,32],[30,14],[17,9],[22,26]];
+  for (let i=0;i<lvl*2 && i<spots.length;i++){
+    facePart(spots[i][0], spots[i][1], 3, 2, "#8e1f14");
+    if (i % 2) facePart(spots[i][0], spots[i][1] + 2, 2, 3, "rgba(142,31,20,.8)");
+  }
+  if (lvl >= 3){                             // пот
+    facePart(8, 14, 2, 5, "#8fc7e8"); facePart(31, 18, 2, 4, "#8fc7e8");
+  }
+  if (st.mood === "shield"){                 // мерцающая плёнка щита
+    fctx.fillStyle = "rgba(63,159,208,.28)";
+    fctx.fillRect(4, 2, 32, 42);
+  }
+}
+
+function updateFace(dt){
+  blinkT -= dt;
+  if (blinkT <= 0){ blinking = !blinking; blinkT = blinking ? .12 : 2 + Math.random()*3; }
+  if (P.hitT > 0) P.hitT -= dt;
+
+  const hp = P.hp;
+  let mood = "calm";
+  if (!playing && hp <= 0) mood = "dead";
+  else if (P.hitT > 0) mood = "hurt";
+  else if (buff === "rage") mood = "rage";
+  else if (buff === "haste") mood = "haste";
+  else if (buff === "shield") mood = "shield";
+  else if (comboT > 0 && combo >= 3) mood = "gloat";
+
+  const blood = hp > 80 ? 0 : hp > 60 ? 1 : hp > 40 ? 2 : hp > 20 ? 3 : 4;
+  const dir = P.hitT > 0 ? P.hitDir : 0;
+  const key = `${mood}|${blood}|${dir}|${blinking}`;
+  if (key === faceKey) return;
+  faceKey = key;
+  paintFace({mood, blood, dir});
+}
+
+/* ================= оружие =================
+   В оригинале ствол — это не один рисунок, а набор кадров с длительностями:
+   покой, выстрел, перезарядка, подъём и опускание при смене. Вспышка — отдельный
+   спрайт поверх. Рисунок здесь свой, повторена именно механика. */
+const SW = 160, SH = 120;                    // система координат спрайта оружия
+function wpnCanvas(){
+  const c = document.createElement("canvas"); c.width = SW; c.height = SH;
+  return [c, c.getContext("2d")];
+}
+const MET = "#2a2c33", MET_L = "#4b4e58", MET_D = "#16181d";
+const WOOD = "#5a3517", WOOD_L = "#7a4a22", BRASS = "#b8912e";
+const GLOVE = "#39312a", GLOVE_L = "#4d4238", SKIN = "#c2884f";
+
+function hand(g, x, y, w, h){
+  g.fillStyle = GLOVE; g.fillRect(x, y, w, h);
+  g.fillStyle = GLOVE_L; g.fillRect(x, y, w, 3);
+  g.fillStyle = SKIN; g.fillRect(x + 3, y + h - 5, w - 6, 5);
+  g.fillStyle = MET_D;
+  for (let i=1;i<4;i++) g.fillRect(x + i*(w/4), y + 4, 1, h - 8);
+}
+
+/* ---- пистолет ---- */
+function artPistol(k){                        // k: 0 покой, 1 отдача, 2 затвор назад
+  const [c, g] = wpnCanvas();
+  const dy = k ? -7 : 0, slide = k === 2 ? 8 : 0;
+  g.fillStyle = MET;  g.fillRect(72, 40 + dy + slide, 15, 40 - slide);   // ствол
+  g.fillStyle = MET_L;g.fillRect(72, 40 + dy + slide, 4, 40 - slide);
+  g.fillStyle = MET_D;g.fillRect(84, 40 + dy + slide, 3, 40 - slide);
+  g.fillStyle = MET;  g.fillRect(68, 74 + dy, 24, 16);                    // затворная рама
+  g.fillStyle = MET_L;g.fillRect(68, 74 + dy, 24, 3);
+  if (k === 2){ g.fillStyle = MET_D; g.fillRect(72, 76 + dy, 14, 6); }    // окно выброса
+  g.fillStyle = MET_D;g.fillRect(66, 88 + dy, 28, 8);
+  g.fillStyle = WOOD; g.fillRect(70, 94 + dy, 20, 22);                    // рукоять
+  g.fillStyle = WOOD_L;g.fillRect(70, 94 + dy, 5, 22);
+  hand(g, 62, 100 + dy, 36, 20);
+  return c;
+}
+function flashPistol(){
+  const [c, g] = wpnCanvas();
+  g.fillStyle = "#ffe9a8"; g.fillRect(72, 24, 15, 18);
+  g.fillStyle = "#ffb43c"; g.fillRect(66, 30, 27, 10);
+  g.fillStyle = "#ff7a10"; g.fillRect(76, 16, 7, 10);
+  return c;
+}
+
+/* ---- дробовик ---- */
+function artShotgun(k){                       // 0 покой, 1 выстрел, 2 цевьё назад, 3 цевьё вперёд
+  const [c, g] = wpnCanvas();
+  const dy = k === 1 ? -9 : 0;
+  const pump = k === 2 ? 14 : k === 3 ? 6 : 0;
+  g.fillStyle = MET;  g.fillRect(64, 18 + dy, 18, 62);                    // ствол
+  g.fillStyle = MET_L;g.fillRect(64, 18 + dy, 5, 62);
+  g.fillStyle = MET_D;g.fillRect(79, 18 + dy, 3, 62);
+  g.fillStyle = MET_D;g.fillRect(62, 16 + dy, 22, 4);                     // дульный срез
+  g.fillStyle = WOOD; g.fillRect(58, 62 + dy + pump, 30, 18);             // цевьё
+  g.fillStyle = WOOD_L;g.fillRect(58, 62 + dy + pump, 30, 4);
+  g.fillStyle = MET;  g.fillRect(60, 84 + dy, 30, 20);                    // ствольная коробка
+  g.fillStyle = MET_L;g.fillRect(60, 84 + dy, 30, 3);
+  if (k === 2){
+    g.fillStyle = MET_D; g.fillRect(86, 88 + dy, 10, 8);
+    g.fillStyle = BRASS; g.fillRect(98, 80 + dy, 7, 11);                  // вылетающая гильза
+  }
+  g.fillStyle = WOOD; g.fillRect(84, 100 + dy, 26, 20);                   // приклад
+  hand(g, 52, 70 + dy + pump, 30, 18);
+  hand(g, 88, 96 + dy, 30, 22);
+  return c;
+}
+function flashShotgun(){
+  const [c, g] = wpnCanvas();
+  g.fillStyle = "#fff0bc"; g.fillRect(58, 0, 30, 20);
+  g.fillStyle = "#ffb43c"; g.fillRect(46, 4, 54, 14);
+  g.fillStyle = "#ff7a10"; g.fillRect(38, 8, 70, 7);
+  return c;
+}
+
+/* ---- пулемёт ---- */
+function artMg(k){       // 0 покой, 1 и 2 — работа автоматики
+  const [c, g] = wpnCanvas();
+  const dy = k === 1 ? -3 : k === 2 ? -6 : 0;   // подброс от отдачи
+  const belt = k ? (k === 1 ? 3 : 6) : 0;       // лента подтягивается в приёмник
+
+  // дульный тормоз
+  g.fillStyle = MET_D; g.fillRect(62, 8 + dy, 36, 9);
+  g.fillStyle = MET_L; g.fillRect(62, 8 + dy, 36, 2);
+  g.fillStyle = MET_D; g.fillRect(70, 4 + dy, 4, 5);
+  g.fillStyle = MET_D; g.fillRect(86, 4 + dy, 4, 5);
+
+  // кожух ствола с вентиляцией
+  g.fillStyle = MET;   g.fillRect(66, 17 + dy, 28, 54);
+  g.fillStyle = MET_L; g.fillRect(66, 17 + dy, 6, 54);
+  g.fillStyle = MET_D; g.fillRect(89, 17 + dy, 5, 54);
+  g.fillStyle = MET_D;
+  for (let y = 23; y < 68; y += 9){
+    g.fillRect(74, y + dy, 6, 5);
+    g.fillRect(82, y + dy, 5, 5);
+  }
+  g.fillStyle = MET_L;                                   // мушка
+  g.fillRect(78, 13 + dy, 4, 6);
+
+  // ствольная коробка
+  g.fillStyle = MET;   g.fillRect(56, 71 + dy, 48, 28);
+  g.fillStyle = MET_L; g.fillRect(56, 71 + dy, 48, 4);    // крышка приёмника
+  g.fillStyle = MET_D; g.fillRect(56, 95 + dy, 48, 4);
+  g.fillStyle = MET_D; g.fillRect(60, 79 + dy, 12, 3);    // петли крышки
+  g.fillStyle = MET_D; g.fillRect(60, 86 + dy, 12, 3);
+
+  // окно выброса и вылетающая гильза
+  g.fillStyle = MET_D; g.fillRect(48, 78 + dy, 10, 10);
+  if (k === 2){
+    g.fillStyle = BRASS; g.fillRect(38, 70 + dy, 6, 9);
+    g.fillStyle = "#8a6a1e"; g.fillRect(38, 76 + dy, 6, 3);
+  }
+
+  // патронная лента справа: звенья ползут вверх при стрельбе
+  for (let i = 0; i < 7; i++){
+    const y = 84 + dy + i*8 - belt;
+    if (y < 74 || y > 120) continue;
+    g.fillStyle = BRASS;      g.fillRect(104, y, 16, 6);
+    g.fillStyle = "#8a6a1e";  g.fillRect(104, y + 4, 16, 2);
+    g.fillStyle = MET_D;      g.fillRect(118, y, 3, 6);
+  }
+
+  // рукоять
+  g.fillStyle = MET_D; g.fillRect(72, 99 + dy, 18, 21);
+  g.fillStyle = MET;   g.fillRect(74, 99 + dy, 5, 21);
+
+  hand(g, 52, 54 + dy, 26, 20);      // левая на кожухе
+  hand(g, 66, 104 + dy, 30, 16);     // правая на рукояти
+  return c;
+}
+function flashMg(){
+  const [c, g] = wpnCanvas();
+  g.fillStyle = "#fff0bc"; g.fillRect(64, 4, 30, 18);
+  g.fillStyle = "#ffb43c"; g.fillRect(54, 8, 50, 11);
+  return c;
+}
+
+/* ---- гранатомёт ---- */
+function artLauncher(k){                      // 0 покой, 1 отдача, 2 дым
+  const [c, g] = wpnCanvas();
+  const dy = k === 1 ? 12 : k === 2 ? 5 : 0;
+  g.fillStyle = MET;   g.fillRect(56, 30 + dy, 48, 54);                   // труба
+  g.fillStyle = MET_L; g.fillRect(56, 30 + dy, 8, 54);
+  g.fillStyle = MET_D; g.fillRect(96, 30 + dy, 8, 54);
+  g.fillStyle = MET_D; g.fillRect(52, 26 + dy, 56, 6);                    // раструб
+  g.fillStyle = "#5b4a8c"; g.fillRect(70, 36 + dy, 20, 10);               // маркировка
+  g.fillStyle = MET_L; g.fillRect(74, 20 + dy, 4, 8);                     // мушка
+  g.fillStyle = MET;   g.fillRect(60, 82 + dy, 40, 18);
+  g.fillStyle = WOOD;  g.fillRect(64, 96 + dy, 16, 24);
+  hand(g, 44, 88 + dy, 28, 24);
+  hand(g, 84, 92 + dy, 28, 24);
+  if (k === 2){
+    g.fillStyle = "rgba(150,150,150,.5)";
+    for (let i=0;i<7;i++) g.fillRect(50 + Math.random()*60, 4 + Math.random()*26, 10, 8);
+  }
+  return c;
+}
+function flashLauncher(){
+  const [c, g] = wpnCanvas();
+  g.fillStyle = "#fff0bc"; g.fillRect(60, 2, 40, 26);
+  g.fillStyle = "#ff9020"; g.fillRect(48, 8, 64, 18);
+  g.fillStyle = "#c0350a"; g.fillRect(40, 14, 80, 9);
+  return c;
+}
+
+/* Кадры и их длительности. Последний кадр каждой очереди — возврат в покой. */
+const WPN = [
+  {frames:[artPistol(0), artPistol(1), artPistol(2)], flash:flashPistol(),
+   tip:[80, 30], scale:.36, seq:[{f:1,t:.05},{f:2,t:.07},{f:1,t:.05}]},
+  {frames:[artShotgun(0), artShotgun(1), artShotgun(2), artShotgun(3)], flash:flashShotgun(),
+   tip:[73, 12], scale:.44, seq:[{f:1,t:.12},{f:2,t:.2,snd:"pump"},{f:3,t:.18},{f:0,t:.1}]},
+  {frames:[artMg(0), artMg(1), artMg(2)], flash:flashMg(),
+   tip:[80, 16], scale:.42, seq:[{f:1,t:.057},{f:2,t:.057}]},
+  {frames:[artLauncher(0), artLauncher(1), artLauncher(2)], flash:flashLauncher(),
+   tip:[80, 20], scale:.46, seq:[{f:1,t:.16},{f:2,t:.3},{f:0,t:.12}]}
+];
+
+let wpnFrame = 0, wpnSeq = null, wpnIdx = 0, wpnT = 0;
+let wpnOffset = 0, wpnSwitch = -1;             // подъём и опускание при смене
+
+function equip(n){
+  if (n === gun || !unlocked[n] || wpnSwitch !== -1) return;
+  wpnSwitch = n;                               // сначала опускаем текущий
+  wpnSeq = null; wpnFrame = 0;
+}
+
+function updateWeapon(dt){
+  if (wpnSwitch !== -1){
+    wpnOffset += dt*5;
+    if (wpnOffset >= 1){
+      wpnOffset = 1;
+      gun = wpnSwitch; wpnSwitch = -1; wpnFrame = 0;
+      updateHUD();
+      beep("sine", 700, .05, .07);
+    }
+  } else if (wpnOffset > 0){
+    wpnOffset = Math.max(0, wpnOffset - dt*5);
+  }
+  if (wpnSeq){
+    wpnT -= dt;
+    if (wpnT <= 0){
+      wpnIdx++;
+      if (wpnIdx >= wpnSeq.length){ wpnSeq = null; wpnFrame = 0; }
+      else {
+        const fr = wpnSeq[wpnIdx];
+        wpnFrame = fr.f; wpnT = fr.t;
+        if (fr.snd === "pump"){ noiseBurst(.09, .16, 1800, 2); beep("square", 180, .07, .08, 90); }
+      }
+    }
+  }
+}
+
+function playFireAnim(){
+  const w = WPN[gun];
+  wpnSeq = w.seq; wpnIdx = 0;
+  wpnFrame = w.seq[0].f; wpnT = w.seq[0].t;
+}
+
+function drawGun(){
+  const w = WPN[gun];
+  // Ствол занимал почти две трети кадра и закрывал обзор. Теперь у каждого
+  // своя доля высоты, а сам он смещён вниз — низ уходит за нижнюю панель.
+  const sh = H*w.scale, sw = sh*SW/SH;
+  // Покачивание как в оригинале: по горизонтали косинус полного круга,
+  // по вертикали — синус, сложенный по модулю. Получается «восьмёрка».
+  const amp = sh*.035;
+  const bx = Math.cos(bobPhase)*amp*1.4;
+  const by = Math.abs(Math.sin(bobPhase))*amp;
+  const x = W/2 - sw/2 + bx;
+  const y = H - sh*.94 + by + wpnOffset*sh*1.25 + recoil*sh*.05;
+
+  ctx.drawImage(w.frames[wpnFrame] || w.frames[0], x, y, sw, sh);
+
   if (flash > .05){
-    const r = H*.11*flash, fy = base - H*(gun === 1 ? .30 : gun === 2 ? .34 : .20);
-    const gr = ctx.createRadialGradient(cx, fy, 0, cx, fy, r);
-    gr.addColorStop(0, `rgba(255,240,190,${flash})`);
-    gr.addColorStop(.5, `rgba(255,150,40,${flash*.7})`);
+    ctx.drawImage(w.flash, x, y, sw, sh);
+    // и общий отсвет от ствола
+    const tx = x + w.tip[0]/SW*sw, ty = y + w.tip[1]/SH*sh;
+    const r = sh*.28*flash;
+    const gr = ctx.createRadialGradient(tx, ty, 0, tx, ty, r);
+    gr.addColorStop(0, `rgba(255,240,190,${(flash*.55).toFixed(2)})`);
+    gr.addColorStop(.5, `rgba(255,150,40,${(flash*.3).toFixed(2)})`);
     gr.addColorStop(1, "rgba(255,80,0,0)");
-    ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(cx, fy, r, 0, 7); ctx.fill();
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(tx, ty, r, 0, 7); ctx.fill();
   }
   drawCrosshair();
 }
@@ -1699,6 +2432,30 @@ function drawGun(){
 /* Прицел. Старый был несимметричен: зазор сверху 1 пиксель, снизу 2, а штрихи
    стояли не по той точке, куда реально уходит пуля. Теперь всё строится вокруг
    центра экрана, а зазор показывает реальный разброс текущего ствола. */
+let VIGN = null;
+function buildVignette(){
+  if (!W || !H) return;
+  const g = ctx.createRadialGradient(W/2, H/2, Math.min(W,H)*.18, W/2, H/2, Math.max(W,H)*.72);
+  g.addColorStop(0, "rgba(0,0,0,0)");
+  g.addColorStop(.55, "rgba(0,0,0,.42)");
+  g.addColorStop(1, "rgba(0,0,0,.92)");
+  VIGN = g;
+}
+
+// плитка шума для зерна
+const GRAIN = (() => {
+  const c = document.createElement("canvas"); c.width = c.height = 128;
+  const g = c.getContext("2d");
+  const img = g.createImageData(128, 128);
+  for (let i=0;i<img.data.length;i+=4){
+    const v = Math.random()*255|0;
+    img.data[i] = img.data[i+1] = img.data[i+2] = v;
+    img.data[i+3] = Math.random()*70|0;
+  }
+  g.putImageData(img, 0, 0);
+  return c;
+})();
+
 function drawCrosshair(){
   const u = Math.max(1, Math.round(W/220));            // толщина штриха
   const ax = Math.round(W/2 - u/2), ay = Math.round(H/2 - u/2);
@@ -1725,21 +2482,29 @@ function drawCrosshair(){
 function drawLastMarkers(horizon){
   if (!playing || enemiesLeft === 0 || enemiesLeft > 3) return;
   const pulse = .45 + .35*Math.sin(clock*7);
-  const half = Math.atan(.66);
+  const dirX = Math.cos(P.a), dirY = Math.sin(P.a);
+  const planeX = -dirY*.66, planeY = dirX*.66;
+  const invDet = 1/(planeX*dirY - dirX*planeY);
+  const size = Math.max(6, W/50);
   ctx.fillStyle = `rgba(214,64,44,${pulse.toFixed(2)})`;
+
   for (const e of enemies){
     if (!e.alive) continue;
-    const rel = angleDiff(Math.atan2(e.y - P.y, e.x - P.x), P.a);
-    const size = Math.max(7, W/44);
-    if (Math.abs(rel) < half){
-      // в поле зрения — галочка над врагом
-      const sx = (W/2) * (1 + Math.tan(rel)/.66);
-      const y = horizon - Math.max(46, H*.22);
+    const rx = e.x - P.x, ry = e.y - P.y;
+    // та же проекция, что и у спрайтов: метка обязана висеть ровно над врагом
+    const tx = invDet*(dirY*rx - dirX*ry), ty = invDet*(-planeY*rx + planeX*ry);
+    const screenX = ty > .2 ? (W/2)*(1 + tx/ty) : -1;
+
+    if (ty > .2 && screenX >= 0 && screenX < W){
+      const sh = Math.abs(H/ty) * KIND[e.type].scale;
+      const top = horizon - sh/2;                      // макушка спрайта
+      const y = Math.max(4, Math.min(H - size - 2, top - size*1.6));
       ctx.beginPath();
-      ctx.moveTo(sx, y + size); ctx.lineTo(sx - size, y); ctx.lineTo(sx + size, y);
+      ctx.moveTo(screenX, y + size); ctx.lineTo(screenX - size, y); ctx.lineTo(screenX + size, y);
       ctx.closePath(); ctx.fill();
     } else {
-      // за спиной — стрелка у края экрана
+      // враг вне кадра — стрелка у ближнего края
+      const rel = angleDiff(Math.atan2(ry, rx), P.a);
       const left = rel < 0;
       const x = left ? size + 2 : W - size - 2;
       ctx.beginPath();
@@ -1818,6 +2583,7 @@ function loop(t){
     if (autoSave > 15){ autoSave = 0; saveGame(); }
   }
   render();
+  if (meltCols) meltStep(dt);
 }
 // уход из вкладки/сворачивание приложения — тоже точка сохранения
 addEventListener("visibilitychange", () => {
@@ -1907,12 +2673,16 @@ function initAudio(){
 
 function beginRun(sv){
   initAudio();
+  startDrone(); setDrone(.05);
   screen.classList.add("hide");
   screen.classList.remove("death");
   title.classList.remove("long");
   paused = false;
+  stopMelt();
   pauseBox.classList.add("gone");
   pauseBtn.classList.remove("gone");
+  faceCv.classList.remove("gone");
+  faceKey = "";
   if (sv){
     P.hp = num(sv.hp,100); P.armor = num(sv.armor,0);
     ammo = {bullets:num(sv.bullets,45), shells:num(sv.shells,10), grenades:num(sv.grenades,0)};
@@ -1949,21 +2719,24 @@ function setPause(v){
       `Уровень ${level} · ${biome.name} · фрагов ${kills}`;
     document.getElementById("pauseseed").textContent = `Семя: ${seedText()}`;
     saveGame();
+    setDrone(0);
     try { document.exitPointerLock?.(); } catch(e){}
     AC?.suspend?.();
   } else {
     last = performance.now();      // иначе первый кадр после паузы придёт с огромным dt
-    AC?.resume?.();
+    AC?.resume?.(); setDrone(.05);
     try { if (DESKTOP) cv.requestPointerLock?.(); } catch(e){}
   }
 }
 
 function quitToMenu(){
   saveGame();
+  setDrone(0);
   paused = false;
   pauseBox.classList.add("gone");
   pauseBtn.classList.add("gone");
   playing = false;
+  faceCv.classList.add("gone");
   screen.classList.remove("hide", "death");
   title.innerHTML = TITLE0;
   title.classList.remove("long");
@@ -1974,6 +2747,10 @@ function quitToMenu(){
 }
 
 function gameOver(){
+  setDrone(0);
+  startMelt();                 // снимок последнего кадра до того, как всё поменяется
+  faceKey = ""; paintFace({mood:"dead", blood:4, dir:0});
+  setTimeout(() => faceCv.classList.add("gone"), 1500);
   paused = false;
   pauseBox.classList.add("gone");
   pauseBtn.classList.add("gone");
@@ -2109,6 +2886,21 @@ resize();
 updateHUD();
 refreshScreen();
 requestAnimationFrame(loop);
+})();
+</script>
+<!-- Cloudflare Web Analytics.
+     Токен берётся в панели Cloudflare: Analytics & Logs -> Web Analytics ->
+     Add a site -> скопировать значение "token" из готового сниппета.
+     Пока строка пустая, счётчик не подключается; локально (file://) тоже молчит. -->
+<script>
+(function(){
+  var CF_TOKEN = "990785e2778e46c89a8bcc756ab1f7a5";
+  if (!CF_TOKEN || location.protocol.indexOf("http") !== 0) return;
+  var b = document.createElement("script");
+  b.defer = true;
+  b.src = "https://static.cloudflareinsights.com/beacon.min.js";
+  b.setAttribute("data-cf-beacon", JSON.stringify({token: CF_TOKEN, spa: false}));
+  document.body.appendChild(b);
 })();
 </script>
 </body>
