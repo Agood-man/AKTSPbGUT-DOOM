@@ -266,6 +266,9 @@ let runSeed = (Math.random()*0xFFFFFFFF) >>> 0;
 let RNG = Math.random;                       // во время игры — обычный random
 const rnd = n => Math.floor(RNG()*n);
 const seedText = () => runSeed.toString(16).toUpperCase().padStart(8, "0");
+let seedName = "";                   // то, что игрок ввёл словами
+// на экранах показываем введённое слово, а в скобках — его числовой вид
+const seedShow = () => seedName ? `${seedName} (${seedText()})` : seedText();
 
 /* Семя можно ввести руками и передать другому игроку.
    Шестнадцатеричная запись читается как есть, любой другой текст хешируется. */
@@ -273,8 +276,9 @@ function parseSeed(str){
   const t = String(str || "").trim().replace(/^#/, "");
   if (!t) return null;
   if (/^[0-9a-fA-F]{1,8}$/.test(t)) return parseInt(t, 16) >>> 0;
+  const u = t.toUpperCase();          // как в поле ввода: регистр не меняет подземелье
   let h = 0x811c9dc5;
-  for (let i=0;i<t.length;i++){ h ^= t.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  for (let i=0;i<u.length;i++){ h ^= u.charCodeAt(i); h = Math.imul(h, 0x01000193); }
   return h >>> 0;
 }
 const roomCenter = r => ({x: r.x + r.w/2, y: r.y + r.h/2});
@@ -1090,7 +1094,7 @@ const num = (v, def) => (typeof v === "number" && isFinite(v)) ? v : def;
 function saveGame(){
   if (!playing) return;
   store.set(SAVE_KEY, JSON.stringify({
-    v:1, level, kills, gun, seed:runSeed,
+    v:1, level, kills, gun, seed:runSeed, seedName,
     hp:Math.round(P.hp), armor:Math.round(P.armor),
     bullets:ammo.bullets, shells:ammo.shells, grenades:ammo.grenades,
     guns:unlocked.reduce((m, v, i) => m | (v ? 1 << i : 0), 0)
@@ -2692,11 +2696,15 @@ function beginRun(sv){
     if (!unlocked[gun]) gun = 0;
     kills = num(sv.kills,0); level = num(sv.level,1) - 1;
     runSeed = (num(sv.seed, runSeed) >>> 0) || runSeed;
+    seedName = typeof sv.seedName === "string" ? sv.seedName : "";
     playing = true;
     nextLevel();
   } else {
     clearSave();
-    reset(parseSeed(seedIn.value));
+    const typed = (seedIn.value || "").trim().replace(/^#/, "").toUpperCase();
+    // если ввели слово, запоминаем его; чистый hex — это и есть само число
+    seedName = /^[0-9A-F]{1,8}$/.test(typed) ? "" : typed;
+    reset(parseSeed(typed));
     playing = true;
     saveGame();
   }
@@ -2717,7 +2725,7 @@ function setPause(v){
     touch.fw = touch.st = 0; knob.style.transform = "";
     document.getElementById("pauseinfo").textContent =
       `Уровень ${level} · ${biome.name} · фрагов ${kills}`;
-    document.getElementById("pauseseed").textContent = `Семя: ${seedText()}`;
+    document.getElementById("pauseseed").textContent = `Семя: ${seedShow()}`;
     saveGame();
     setDrone(0);
     try { document.exitPointerLock?.(); } catch(e){}
@@ -2761,7 +2769,7 @@ function gameOver(){
   screen.classList.add("death");
   title.innerHTML = "ТЕБЕ ПОРВАЛИ&nbsp;ТУЗ";
   title.classList.add("long");
-  msg.textContent = `Уровень ${level} · ${biome.name}. Фрагов: ${kills}. Семя подземелья: ${seedText()}.`;
+  msg.textContent = `Уровень ${level} · ${biome.name}. Фрагов: ${kills}. Семя подземелья: ${seedShow()}.`;
   startBtn.textContent = "ЕЩЁ РАЗ";
   // Поле остаётся пустым: «ЕЩЁ РАЗ» — это новое подземелье.
   // Семя прошлого забега видно в тексте выше и лежит под кнопкой «СКОПИРОВАТЬ».
@@ -2789,7 +2797,7 @@ function onTap(el, fn){
 onTap(startBtn, () => beginRun(null));
 onTap(contBtn, () => beginRun(loadGame()));
 onTap(pauseBtn, () => setPause(true));
-onTap(seedCopy, () => copyText(seedIn.value || seedText(), seedCopy));
+onTap(seedCopy, () => copyText(seedText(), seedCopy));
 onTap(seedPaste, () => pasteSeed(seedPaste));
 onTap(pauseSeedBtn, () => copyText(seedText(), pauseSeedBtn));
 onTap(document.getElementById("resume"), () => setPause(false));
