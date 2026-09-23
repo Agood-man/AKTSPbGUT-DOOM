@@ -224,7 +224,7 @@ function nextLevel(){
   flickerT = 2; flickerLeft = 0;
   stat = {fired:0, hit:0, t:0, n:enemies.length};
   combo = 0; comboT = 0;
-  document.getElementById("combo").classList.remove("show");
+  HUD.combo.classList.remove("show");
   grenades.length = 0; booms.length = 0;
   wpnSeq = null; wpnFrame = 0; wpnOffset = 0; wpnSwitch = -1;
   updateHUD();
@@ -248,17 +248,32 @@ var shortNum = n => n < 100000 ? String(n)
   : n < 1e9 ? (n/1e6).toFixed(1) + "M"
   : (n/1e9).toFixed(2) + "B";
 
+var HUD = {
+  hp: document.querySelector("#hp b"),
+  armor: document.querySelector("#armor b"),
+  kills: document.querySelector("#kills b"),
+  left: document.getElementById("left"),
+  leftValue: document.querySelector("#left b"),
+  lvl: document.querySelector("#lvl b"),
+  ammo: document.querySelector("#ammo b"),
+  gunname: document.getElementById("gunname"),
+  lowhp: document.getElementById("lowhp"),
+  hurt: document.getElementById("hurt"),
+  pick: document.getElementById("pick"),
+  combo: document.getElementById("combo"),
+  buff: document.getElementById("buff")
+};
+
 function updateHUD(){
-  document.querySelector("#hp b").textContent = Math.max(0, Math.round(P.hp));
-  document.querySelector("#armor b").textContent = Math.round(P.armor);
-  document.querySelector("#kills b").textContent = shortNum(kills);
-  const leftEl = document.getElementById("left");
-  leftEl.querySelector("b").textContent = enemiesLeft;
-  leftEl.classList.toggle("clear", enemiesLeft === 0);
-  document.querySelector("#lvl b").textContent = shortNum(level);
+  HUD.hp.textContent = Math.max(0, Math.round(P.hp));
+  HUD.armor.textContent = Math.round(P.armor);
+  HUD.kills.textContent = shortNum(kills);
+  HUD.leftValue.textContent = enemiesLeft;
+  HUD.left.classList.toggle("clear", enemiesLeft === 0);
+  HUD.lvl.textContent = shortNum(level);
   const g = GUNS[gun];
-  document.querySelector("#ammo b").textContent = g.ammo ? ammo[g.ammo] : "∞";
-  document.getElementById("gunname").textContent = g.name;
+  HUD.ammo.textContent = g.ammo ? ammo[g.ammo] : "∞";
+  HUD.gunname.textContent = g.name;
 }
 
 var PR = .26;

@@ -67,6 +67,7 @@ function flowDir(e){
 }
 
 var ER = .3;
+var enemyGrid = new Map();
 function solid(x, y, r){
   return cell(x-r, y-r) || cell(x+r, y-r) || cell(x-r, y+r) || cell(x+r, y+r);
 }
@@ -118,7 +119,7 @@ function registerKill(){
   beep("sawtooth", 110 + Math.min(10, combo)*20, .35, .2);
   if (combo >= 2){
     const r = RANKS.find(([n]) => combo >= n);
-    const el = document.getElementById("combo");
+    const el = HUD.combo;
     el.textContent = `×${combo} · ${r[1]}`;
     el.classList.add("show");
   }
@@ -422,20 +423,41 @@ function update(dt){
     move(dx/d*push, dy/d*push);
   }
 
-  for (let i=0;i<enemies.length;i++){
+  // Broad-phase collision: only test enemies in the same/adjacent 1x1 cells.
+  enemyGrid.clear();
+  for (let i=0; i<enemies.length; i++){
+    const e = enemies[i];
+    if (!e.alive) continue;
+    const gx = Math.floor(e.x), gy = Math.floor(e.y);
+    const key = gx * 128 + gy;
+    let bucket = enemyGrid.get(key);
+    if (!bucket){ bucket = []; enemyGrid.set(key, bucket); }
+    bucket.push(i);
+  }
+
+  const minD = .62, minD2 = minD * minD;
+  for (let i=0; i<enemies.length; i++){
     const a = enemies[i];
     if (!a.alive) continue;
-    for (let j=i+1;j<enemies.length;j++){
-      const b = enemies[j];
-      if (!b.alive) continue;
-      const sx = b.x - a.x, sy = b.y - a.y;
-      const q = sx*sx + sy*sy, minD = .62;
-      if (q > minD*minD) continue;
-      const sd = Math.sqrt(q) || .001;
-      const push = (minD - sd)*.5;
-      const nx = sx/sd*push, ny = sy/sd*push;
-      moveEnemy(a, -nx, -ny);
-      moveEnemy(b, nx, ny);
+    const gx = Math.floor(a.x), gy = Math.floor(a.y);
+    for (let oy=-1; oy<=1; oy++){
+      for (let ox=-1; ox<=1; ox++){
+        const bucket = enemyGrid.get((gx + ox) * 128 + (gy + oy));
+        if (!bucket) continue;
+        for (const j of bucket){
+          if (j <= i) continue;
+          const b = enemies[j];
+          if (!b.alive) continue;
+          const sx = b.x - a.x, sy = b.y - a.y;
+          const q = sx*sx + sy*sy;
+          if (q > minD2) continue;
+          const sd = Math.sqrt(q) || .001;
+          const push = (minD - sd)*.5;
+          const nx = sx/sd*push, ny = sy/sd*push;
+          moveEnemy(a, -nx, -ny);
+          moveEnemy(b, nx, ny);
+        }
+      }
     }
   }
   enemies = enemies.filter(e => e.alive || e.deadT < 2.6);
