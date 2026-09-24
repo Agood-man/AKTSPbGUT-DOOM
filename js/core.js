@@ -1,6 +1,16 @@
 "use strict";
 
 var MW = 35, MH = 35;
+var SET_KEY = "terplandia3d.settings";
+var SET_DEFAULT = { sensMouse:1, sensTouch:1, bright:1, volume:1, quality:1, ctrlSize:1, ctrlAlpha:1, pos:{} };
+var SET = (() => {
+  let s = {};
+  try { s = JSON.parse(localStorage.getItem(SET_KEY)) || {}; } catch(e){}
+  const out = Object.assign({}, SET_DEFAULT, s);
+  out.pos = Object.assign({}, (s && s.pos) || {});
+  return out;
+})();
+function saveSettings(){ try { localStorage.setItem(SET_KEY, JSON.stringify(SET)); } catch(e){} }
 var gridVersion = 0;
 var GRID = new Uint8Array(MW*MH);
 var rooms = [];

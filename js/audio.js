@@ -85,7 +85,7 @@ var cv = document.getElementById("c"), ctx = cv.getContext("2d", {alpha:false});
 var W = 0, H = 0, zbuf = null;
 function resize(){
   const rw = cv.clientWidth, rh = cv.clientHeight;
-  W = Math.min(440, Math.round(rw / 2));
+  W = Math.max(80, Math.min(440, Math.round(rw / 2 * SET.quality)));
   H = Math.round(W * rh / rw);
   cv.width = W; cv.height = H;
   zbuf = new Float32Array(W);

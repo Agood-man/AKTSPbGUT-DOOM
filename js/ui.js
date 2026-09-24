@@ -12,6 +12,125 @@ function fpsTick(rawMs){
   }
 }
 
+var layoutEdit = false;
+var CTRL_IDS = ["stick", "fire", "swap", "pausebtn"];
+var CTRL_ORIGIN = { stick:"left bottom", fire:"right bottom", swap:"right bottom", pausebtn:"right top" };
+
+function applyControls(){
+  for (const id of CTRL_IDS){
+    const el = document.getElementById(id);
+    const p = SET.pos[id];
+    const scale = id === "pausebtn" ? 1 : SET.ctrlSize;
+    el.style.opacity = id === "pausebtn" ? "" : SET.ctrlAlpha;
+    if (p){
+      el.style.left = (p.x*100) + "%"; el.style.top = (p.y*100) + "%";
+      el.style.right = "auto"; el.style.bottom = "auto";
+      el.style.transformOrigin = "center";
+      el.style.transform = `translate(-50%,-50%) scale(${scale})`;
+    } else {
+      el.style.left = el.style.top = el.style.right = el.style.bottom = "";
+      el.style.transformOrigin = CTRL_ORIGIN[id];
+      el.style.transform = scale === 1 ? "" : `scale(${scale})`;
+    }
+  }
+}
+
+var SLIDERS = {
+  sensMouse: [100, v => v + "%"], sensTouch: [100, v => v + "%"],
+  bright: [100, v => v + "%"], volume: [100, v => v + "%"],
+  quality: [100, v => v + "%"], ctrlSize: [100, v => v + "%"], ctrlAlpha: [100, v => v + "%"]
+};
+var settingsFrom = null;
+
+function syncSettingsUI(){
+  for (const k in SLIDERS){
+    const v = Math.round(SET[k] * SLIDERS[k][0]);
+    document.getElementById("s_" + k).value = v;
+    document.getElementById("v_" + k).textContent = SLIDERS[k][1](v);
+  }
+  document.getElementById("setnote").textContent =
+    HAS_TOUCH ? "" : "Расположение кнопок настраивается на сенсорных устройствах";
+}
+
+function openSettings(from){
+  settingsFrom = from;
+  syncSettingsUI();
+  document.getElementById("settings").classList.remove("gone");
+}
+function closeSettings(){
+  document.getElementById("settings").classList.add("gone");
+  saveSettings();
+}
+
+function startLayoutEdit(){
+  if (!HAS_TOUCH) return;
+  layoutEdit = true;
+  fireHeld = false; stickId = null; lookId = null; touch.fw = touch.st = 0; knob.style.transform = "";
+  document.getElementById("settings").classList.add("gone");
+  for (const id of ["pause", "screen"]) document.getElementById(id).classList.add("hidden-edit");
+  document.body.classList.add("editing");
+  document.getElementById("layoutbar").classList.remove("gone");
+}
+function stopLayoutEdit(){
+  layoutEdit = false;
+  document.body.classList.remove("editing");
+  document.getElementById("layoutbar").classList.add("gone");
+  for (const id of ["pause", "screen"]) document.getElementById(id).classList.remove("hidden-edit");
+  saveSettings();
+  openSettings(settingsFrom);
+}
+
+function initSettings(){
+  for (const k in SLIDERS){
+    const input = document.getElementById("s_" + k);
+    input.addEventListener("input", () => {
+      const v = +input.value;
+      SET[k] = v / SLIDERS[k][0];
+      document.getElementById("v_" + k).textContent = SLIDERS[k][1](v);
+      if (k === "volume") applyVolume();
+      if (k === "quality") resize();
+      if (k === "ctrlSize" || k === "ctrlAlpha") applyControls();
+    });
+    input.addEventListener("change", saveSettings);
+  }
+  onTap(document.getElementById("settingsbtn"), () => openSettings("menu"));
+  onTap(document.getElementById("settingsbtn2"), () => openSettings("pause"));
+  onTap(document.getElementById("setclose"), closeSettings);
+  onTap(document.getElementById("setreset"), () => {
+    const keep = SET;
+    Object.assign(keep, SET_DEFAULT, { pos:{} });
+    applyVolume(); resize(); applyControls(); syncSettingsUI(); saveSettings();
+  });
+  onTap(document.getElementById("layoutbtn"), startLayoutEdit);
+  onTap(document.getElementById("layoutdone"), stopLayoutEdit);
+  onTap(document.getElementById("layoutreset"), () => { SET.pos = {}; applyControls(); });
+
+  const wrap = document.getElementById("wrap");
+  for (const id of CTRL_IDS){
+    const el = document.getElementById(id);
+    let dragging = false;
+    el.addEventListener("pointerdown", e => {
+      if (!layoutEdit) return;
+      dragging = true;
+      el.setPointerCapture?.(e.pointerId);
+      e.preventDefault(); e.stopPropagation();
+    });
+    el.addEventListener("pointermove", e => {
+      if (!layoutEdit || !dragging) return;
+      const r = wrap.getBoundingClientRect();
+      const x = Math.min(.97, Math.max(.03, (e.clientX - r.left) / r.width));
+      const y = Math.min(.97, Math.max(.03, (e.clientY - r.top) / r.height));
+      SET.pos[id] = { x, y };
+      applyControls();
+      e.preventDefault();
+    });
+    const end = () => { dragging = false; };
+    el.addEventListener("pointerup", end);
+    el.addEventListener("pointercancel", end);
+  }
+  applyControls();
+}
+
 function loop(t){
   requestAnimationFrame(loop);
   const rawMs = (t - last) || 0;
@@ -431,7 +550,7 @@ function onTap(el, fn){
 
 onTap(startBtn, () => beginRun(null));
 onTap(contBtn, () => beginRun(loadGame()));
-onTap(pauseBtn, () => setPause(true));
+onTap(pauseBtn, () => { if (!layoutEdit) setPause(true); });
 onTap(seedCopy, () => copyText(seedText(), seedCopy));
 onTap(seedPaste, () => pasteSeed(seedPaste));
 onTap(pauseSeedBtn, () => copyText(seedText(), pauseSeedBtn));
@@ -477,10 +596,10 @@ addEventListener("mousemove", e => {
     const a = Math.abs(mx);
     if (a > 300 || (a > 120 && a > mouseAvg*10 + 60)) return;
     mouseAvg = mouseAvg*.8 + a*.2;
-    P.a += mx * .0026;
+    P.a += mx * .0026 * SET.sensMouse;
     return;
   }
-  if (mouseHeld){ P.a += (e.clientX - lastMouseX) * .004; lastMouseX = e.clientX; }
+  if (mouseHeld){ P.a += (e.clientX - lastMouseX) * .004 * SET.sensMouse; lastMouseX = e.clientX; }
 });
 
 var touch = {fw:0, st:0};
@@ -488,18 +607,18 @@ var stick = document.getElementById("stick"), knob = document.getElementById("kn
 var fireBtn = document.getElementById("fire"), swapBtn = document.getElementById("swap");
 var stickId = null, lookId = null, lookX = 0;
 
-stick.addEventListener("touchstart", e => { stickId = e.changedTouches[0].identifier; e.preventDefault(); }, {passive:false});
+stick.addEventListener("touchstart", e => { if (layoutEdit) return; stickId = e.changedTouches[0].identifier; e.preventDefault(); }, {passive:false});
 addEventListener("touchmove", e => {
   for (const t of e.changedTouches){
     if (t.identifier === stickId){
       const r = stick.getBoundingClientRect();
       let dx = t.clientX - (r.left + r.width/2), dy = t.clientY - (r.top + r.height/2);
-      const m = Math.min(1, Math.hypot(dx,dy)/46), ang = Math.atan2(dy,dx);
+      const m = Math.min(1, Math.hypot(dx,dy)/(46 * SET.ctrlSize)), ang = Math.atan2(dy,dx);
       dx = Math.cos(ang)*m; dy = Math.sin(ang)*m;
       knob.style.transform = `translate(${dx*36}px,${dy*36}px)`;
       touch.st = dx; touch.fw = -dy;
     } else if (t.identifier === lookId){
-      P.a += (t.clientX - lookX) * .006;
+      P.a += (t.clientX - lookX) * .006 * SET.sensTouch;
       lookX = t.clientX;
     }
   }
@@ -518,10 +637,10 @@ cv.addEventListener("touchstart", e => {
   if (lookId === null){ lookId = t.identifier; lookX = t.clientX; }
   e.preventDefault();
 }, {passive:false});
-fireBtn.addEventListener("touchstart", e => { fireHeld = true; e.preventDefault(); }, {passive:false});
+fireBtn.addEventListener("touchstart", e => { if (layoutEdit) return; fireHeld = true; e.preventDefault(); }, {passive:false});
 fireBtn.addEventListener("touchend", e => { fireHeld = false; e.preventDefault(); }, {passive:false});
 fireBtn.addEventListener("touchcancel", () => { fireHeld = false; });
-swapBtn.addEventListener("touchstart", e => { switchGun(gun + 1); e.preventDefault(); }, {passive:false});
+swapBtn.addEventListener("touchstart", e => { if (layoutEdit) return; switchGun(gun + 1); e.preventDefault(); }, {passive:false});
 
 var HAS_TOUCH = (navigator.maxTouchPoints || 0) > 0 || "ontouchstart" in window;
 var DESKTOP = matchMedia("(pointer:fine)").matches && !HAS_TOUCH;
@@ -533,6 +652,7 @@ try {
 } catch(e){}
 
 initDebug();
+initSettings();
 
 generateLevel(0);
 resize();

@@ -30,7 +30,7 @@ function startDrone(){
   sub.type = "sine"; sub.frequency.value = 27;
   flt.type = "lowpass"; flt.frequency.value = 160;
   droneGain.gain.value = .05;
-  drone.connect(flt); sub.connect(flt); flt.connect(droneGain); droneGain.connect(AC.destination);
+  drone.connect(flt); sub.connect(flt); flt.connect(droneGain); droneGain.connect(masterOut());
   drone.start(); sub.start();
 }
 
@@ -63,12 +63,24 @@ function ambience(dt){
   }
 }
 
+var masterGain = null;
+function masterOut(){
+  if (!AC) return null;
+  if (!masterGain){
+    masterGain = AC.createGain();
+    masterGain.gain.value = SET.volume;
+    masterGain.connect(AC.destination);
+  }
+  return masterGain;
+}
+function applyVolume(){ if (masterGain) masterGain.gain.value = SET.volume; }
+
 function outNode(pan){
   if (!AC) return null;
-  if (!pan || !AC.createStereoPanner) return AC.destination;
+  if (!pan || !AC.createStereoPanner) return masterOut();
   const p = AC.createStereoPanner();
   p.pan.value = Math.max(-1, Math.min(1, pan));
-  p.connect(AC.destination);
+  p.connect(masterOut());
   return p;
 }
 

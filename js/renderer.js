@@ -267,7 +267,8 @@ function update(dt){
   if (keys.arrowright) P.a += 2.2*dt;
   fw += touch.fw; st += touch.st;
 
-  const sp = 2.7 * (buff === "haste" ? 1.42 : 1) * dt;
+  const sprint = gun === 0 && wpnSwitch === -1 ? 1.3 : 1;
+  const sp = 2.7 * (buff === "haste" ? 1.42 : 1) * sprint * dt;
   if (fw || st){
     const len = Math.hypot(fw, st) || 1;
     const f = fw/len, s = st/len;
@@ -560,6 +561,72 @@ function update(dt){
 }
 
 var SPR = [], sprN = 0, drawn = [];
+
+var TEXD = {};
+function texLevel(hit, side, lvl){
+  let t = TEXD[hit];
+  if (!t) t = TEXD[hit] = [[], []];
+  let c = t[side][lvl];
+  if (!c){
+    const src = (TEX[hit] || TEX[1])[side];
+    c = document.createElement("canvas"); c.width = c.height = 64;
+    const g = c.getContext("2d");
+    g.drawImage(src, 0, 0);
+    if (lvl > 0){ g.fillStyle = FOG_STYLE[Math.min(255, lvl*4 + 2)]; g.fillRect(0, 0, 64, 64); }
+    t[side][lvl] = c;
+  }
+  return c;
+}
+
+var LIGHT_COLORS = [[255,120,40], [210,55,30], [230,196,40], [70,165,215], [255,150,60]];
+var BUFF_LIGHT = { rage:1, haste:2, shield:3 };
+var TINT = LIGHT_COLORS.map(([r,g,b]) => {
+  const a = [];
+  for (let i = 0; i < 32; i++) a.push(`rgba(${r},${g},${b},${(i/31*.55).toFixed(3)})`);
+  return a;
+});
+var GLOW = LIGHT_COLORS.map(([r,g,b]) => {
+  const c = document.createElement("canvas"); c.width = c.height = 64;
+  const g2 = c.getContext("2d");
+  const gr = g2.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, `rgba(255,255,255,.55)`);
+  gr.addColorStop(.18, `rgba(${r},${g},${b},.5)`);
+  gr.addColorStop(.55, `rgba(${r},${g},${b},.14)`);
+  gr.addColorStop(1, `rgba(${r},${g},${b},0)`);
+  g2.fillStyle = gr; g2.fillRect(0, 0, 64, 64);
+  return c;
+});
+var LX = new Float32Array(64), LY = new Float32Array(64), LR2 = new Float32Array(64),
+    LI = new Float32Array(64), LC = new Uint8Array(64), LH = new Float32Array(64);
+var nL = 0;
+var TC = new Uint8Array(512), TA = new Uint8Array(512), TY0 = new Float32Array(512), TY1 = new Float32Array(512);
+
+function addLight(x, y, r, inten, color, yOff){
+  if (nL >= 64 || inten <= .01) return;
+  LX[nL] = x; LY[nL] = y; LR2[nL] = r*r; LI[nL] = inten; LC[nL] = color; LH[nL] = yOff;
+  nL++;
+}
+
+function collectLights(){
+  nL = 0;
+  for (const b of shots) addLight(b.x, b.y, 3.2, 1, 0, .05);
+  for (const it of items){
+    const c = BUFF_LIGHT[it.kind];
+    if (c !== undefined) addLight(it.x, it.y, 2.8, .85 * (.8 + .2*Math.sin(clock*5 + it.x)), c, .32);
+  }
+  for (const e of booms) addLight(e.x, e.y, 5.5, 1.6 * Math.max(0, 1 - e.t/.45), 4, .05);
+}
+
+function lightAt(x, y){
+  let lit = 0;
+  for (let i = 0; i < nL; i++){
+    const dx = LX[i] - x, dy = LY[i] - y, d2 = dx*dx + dy*dy;
+    if (d2 >= LR2[i]) continue;
+    let f = 1 - d2/LR2[i];
+    lit += f*f*LI[i];
+  }
+  return lit;
+}
 var byDepth = (a, b) => b.ty - a.ty;
 
 var FOG_LUT_K = 2048, FOG_LUT_MAX = 1.1;
@@ -582,7 +649,8 @@ function render(){
   const shakeAmp = (P.hp < 45 ? (1 - P.hp/45)*2.2 : 0) + (P.hitT > 0 ? P.hitT*9 : 0);
   const horizon = H*.5 + (shakeAmp ? Math.sin(clock*17)*shakeAmp + (Math.random()-.5)*shakeAmp*.6 : 0);
 
-  const L = lightNow;
+  const LV = lightNow * SET.bright;
+  const L = LV;
   const mix = (a, b, t) => Math.round(a + (b - a)*t);
   const dim = (r, gg, b, k) => `rgb(${mix(0,r,k)},${mix(0,gg,k)},${mix(0,b,k)})`;
   let g = ctx.createLinearGradient(0,0,0,horizon);
@@ -592,7 +660,8 @@ function render(){
   g.addColorStop(0, dim(36,26,21, L*.55)); g.addColorStop(1, dim(74,56,44, L));
   ctx.fillStyle = g; ctx.fillRect(0,horizon,W,H-horizon);
 
-  const fogInv = 1 / (7.2 * lightNow), fogK = FOG_LUT_K / FOG_LUT_MAX;
+  const fogInv = 1 / (7.2 * LV), fogK = FOG_LUT_K / FOG_LUT_MAX;
+  collectLights();
   for (let x=0; x<W; x++){
     const cam = 2*x/W - 1;
     const rdx = dirX + planeX*cam, rdy = dirY + planeY*cam;
@@ -617,8 +686,6 @@ function render(){
     wallX -= Math.floor(wallX);
     let texX = (wallX*64) | 0;
     if ((side === 0 && rdx > 0) || (side === 1 && rdy < 0)) texX = 63 - texX;
-    const tex = (TEX[hit] || TEX[1])[side];
-    ctx.drawImage(tex, texX, 0, 1, 64, x, horizon - lh/2, 1, lh);
     let fi = -1;
     if (brightMode){
       if (zbuf[x] > 1.2) fi = (Math.min(.35, zbuf[x]/60) * 255 + .5) | 0;
@@ -626,10 +693,41 @@ function render(){
       const u = zbuf[x] * fogInv;
       if (u > FOG_U_MIN) fi = u >= FOG_LUT_MAX ? FOG_IDX_SAT : FOG_LUT[(u * fogK) | 0];
     }
-    if (fi >= 0){
-      ctx.fillStyle = FOG_STYLE[fi];
-      ctx.fillRect(x, y0, 1, y1-y0);
+
+    TA[x] = 0;
+    if (nL){
+      const hx = P.x + rdx*dist, hy = P.y + rdy*dist;
+      let lit = 0, best = 0, bestC = 0;
+      for (let i = 0; i < nL; i++){
+        if (side === 0 ? (LX[i] - hx) * sx > 0 : (LY[i] - hy) * sy > 0) continue;
+        const ddx2 = LX[i] - hx, ddy2 = LY[i] - hy, d2 = ddx2*ddx2 + ddy2*ddy2;
+        if (d2 >= LR2[i]) continue;
+        let f = 1 - d2/LR2[i]; f = f*f*LI[i];
+        lit += f;
+        if (f > best){ best = f; bestC = LC[i]; }
+      }
+      if (lit > .02){
+        if (fi >= 0){
+          fi = (fi * (1 - Math.min(1, lit) * .85)) | 0;
+          if (fi < 5) fi = -1;
+        }
+        const a = Math.min(31, (lit * 22) | 0);
+        if (a > 0){ TA[x] = a; TC[x] = bestC; TY0[x] = y0; TY1[x] = y1; }
+      }
     }
+
+    const lvl = fi < 0 ? 0 : Math.max(1, fi >> 2);
+    ctx.drawImage(texLevel(hit || 1, side, lvl), texX, 0, 1, 64, x, horizon - lh/2, 1, lh);
+  }
+
+  if (nL){
+    ctx.globalCompositeOperation = "lighter";
+    for (let x = 0; x < W; x++){
+      if (!TA[x]) continue;
+      ctx.fillStyle = TINT[TC[x]][TA[x]];
+      ctx.fillRect(x, TY0[x], 1, TY1[x] - TY0[x]);
+    }
+    ctx.globalCompositeOperation = "source-over";
   }
 
   if (flash > .04){
@@ -664,6 +762,7 @@ function render(){
     o.tx = invDet*(dirY*sx - dirX*sy); o.ty = ty;
     o.hurt = false; o.eyes = false; o.dead = false; o.deadT = 0;
     o.deadBlood = false; o.bloodT = 0; o.boom = false; o.boomT = 0;
+    o.emit = false; o.glow = -1; o.glowA = 0;
     drawn.push(o);
     return o;
   };
@@ -686,8 +785,23 @@ function render(){
       if (b){ b.deadBlood = true; b.bloodT = e.deadT; }
     }
   }
-  for (const it of items) addSprite(it.x, it.y, ART[it.kind], .55, .32 + Math.sin(it.t*2)*.02);
-  for (const b of shots) addSprite(b.x, b.y, ART.fireball, .45, .05);
+  for (const it of items){
+    const o = addSprite(it.x, it.y, ART[it.kind], .55, .32 + Math.sin(it.t*2)*.02);
+    const c = BUFF_LIGHT[it.kind];
+    if (o && c !== undefined){
+      o.emit = true;
+      const g = addSprite(it.x, it.y, GLOW[c], 1.5, .32);
+      if (g){ g.glow = c; g.glowA = .75 + .25*Math.sin(clock*5 + it.x); }
+    }
+  }
+  for (const b of shots){
+    const o = addSprite(b.x, b.y, ART.fireball, .45, .05);
+    if (o){
+      o.emit = true;
+      const g = addSprite(b.x, b.y, GLOW[0], 1.35, .05);
+      if (g){ g.glow = 0; g.glowA = .9; }
+    }
+  }
   for (const b of grenades) addSprite(b.x, b.y, ART.grenade, .3, .18);
   for (const e of booms){
     const o = addSprite(e.x, e.y, ART.boom, 1.1 + e.t*4.5, .05);
@@ -702,8 +816,29 @@ function render(){
     const y0 = horizon - sh/2 + o.yOff*Math.abs(H/o.ty);
     const x0 = screenX - sw/2;
 
-    const bright = brightMode ? Math.max(.75, 1 - o.ty/40)
-                 : Math.max(.05, (1 - o.ty/(8.2*lightNow)) * lightNow);
+    if (o.glow >= 0){
+      const from = Math.max(0, Math.floor(x0)), to = Math.min(W, Math.ceil(x0+sw));
+      if (from < to){
+        ctx.globalCompositeOperation = "lighter";
+        ctx.globalAlpha = o.glowA;
+        let fullyVisible = true;
+        for (let x=from; x<to; x++){ if (o.ty >= zbuf[x]) { fullyVisible = false; break; } }
+        if (fullyVisible) ctx.drawImage(o.img, 0, 0, 64, 64, x0, y0, sw, sh);
+        else for (let x=from; x<to; x++){
+          if (o.ty >= zbuf[x]) continue;
+          const tX = Math.min(63, Math.max(0, ((x - x0) * 64 / sw) | 0));
+          ctx.drawImage(o.img, tX, 0, 1, 64, x, y0, 1, sh);
+        }
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = "source-over";
+      }
+      continue;
+    }
+
+    let bright = brightMode ? Math.max(.75, 1 - o.ty/40)
+               : Math.max(.05, (1 - o.ty/(8.2*LV)) * LV);
+    if (o.emit) bright = Math.max(bright, 1);
+    else if (nL) bright = Math.min(1.1, bright + lightAt(o.x, o.y) * .55);
     sctx.clearRect(0,0,64,64);
     sctx.save();
     sctx.globalAlpha = o.boom ? Math.max(0, 1 - o.boomT/.45)
