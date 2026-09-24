@@ -36,6 +36,11 @@
     text-shadow:0 2px 0 #000,0 0 18px #000;opacity:0;transition:opacity .2s;
   }
   #combo.show{opacity:1}
+  #fps{
+    position:absolute;right:62px;top:calc(12px + env(safe-area-inset-top));
+    font-size:11px;line-height:1.3;text-align:right;pointer-events:none;
+    color:var(--slime);text-shadow:0 1px 0 #000;white-space:pre;
+  }
   #face{
     position:absolute;left:50%;transform:translateX(-50%);
     bottom:calc(54px + env(safe-area-inset-bottom));
@@ -162,9 +167,6 @@
     align-items:center;justify-content:flex-start;gap:14px;text-align:center;
     padding:20px;background:rgba(18,12,10,.94);overflow-y:auto;
   }
-  /* Центровка автополями, а не justify-content:center. Центр выталкивал
-     верх содержимого за границу экрана, и до заголовка нельзя было
-     доскроллить. Автополя центрируют, пока влезает, и схлопываются, когда нет. */
   #title{margin-top:auto;margin-bottom:0}
   #legal{margin-bottom:auto}
   #screen.hide{display:none}
@@ -190,7 +192,7 @@
     cursor:pointer;color:var(--dark);background:var(--bone);border:0;
   }
   #screen button:active{background:var(--slime)}
-  #legal{   /* нижнее auto в margin ниже — часть центровки, не убирать */
+  #legal{
     max-width:48ch;font-size:10px;line-height:1.5;letter-spacing:0;
     opacity:.45;margin:2px 0 auto;
   }
