@@ -678,10 +678,22 @@ function render(){
     sctx.globalAlpha = 1;
 
     const from = Math.max(0, Math.floor(x0)), to = Math.min(W, Math.ceil(x0+sw));
-    for (let x=from; x<to; x++){
-      if (o.ty >= zbuf[x]) continue;
-      const texX = Math.min(63, Math.max(0, ((x - x0) * 64 / sw) | 0));
-      ctx.drawImage(shade, texX, 0, 1, 64, x, y0, 1, sh);
+    if (from < to){
+      // Fast path: if the whole sprite is in front of the wall depth buffer,
+      // draw it once instead of issuing one drawImage call per screen column.
+      let fullyVisible = true;
+      for (let x=from; x<to; x++){
+        if (o.ty >= zbuf[x]) { fullyVisible = false; break; }
+      }
+      if (fullyVisible){
+        ctx.drawImage(shade, 0, 0, 64, 64, x0, y0, sw, sh);
+      } else {
+        for (let x=from; x<to; x++){
+          if (o.ty >= zbuf[x]) continue;
+          const texX = Math.min(63, Math.max(0, ((x - x0) * 64 / sw) | 0));
+          ctx.drawImage(shade, texX, 0, 1, 64, x, y0, 1, sh);
+        }
+      }
     }
 
     if (o.eyes && bright < .4 && o.ty < 17){
