@@ -40,6 +40,7 @@ function generateLevel(depth){
     for (let x=(spawn.x|0)-1; x<=(spawn.x|0)+1; x++) setCell(x, y, 0);
 
   RNG = Math.random;
+  gridVersion++;
   return {x: spawn.x, y: spawn.y};
 }
 

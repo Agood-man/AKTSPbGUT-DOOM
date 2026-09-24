@@ -1,7 +1,5 @@
 
 function saveGame(){
-  // Забег, в котором трогали отладку, не пишется вообще. Честное сохранение
-  // при этом не стирается — оно просто остаётся таким, каким было до отладки.
   if (!playing || cheated) return;
   store.set(SAVE_KEY, JSON.stringify({
     v:1, level, kills, gun, seed:runSeed, seedName, cheated,
@@ -29,7 +27,7 @@ function getRecord(){
   } catch(e){ return {level:0, kills:0}; }
 }
 function saveRecord(){
-  if (cheated) return;               // рекорд из отладки не засчитывается
+  if (cheated) return;
   const r = getRecord();
   if (level > num(r.level,0) || (level === num(r.level,0) && kills > num(r.kills,0)))
     store.set(REC_KEY, JSON.stringify({level, kills}));
@@ -82,8 +80,6 @@ function freeCell(minDist){
   for (let i=0;i<800;i++){
     const x = 1.5 + Math.random()*(MW-3), y = 1.5 + Math.random()*(MH-3);
     if (solid(x, y, .34)) continue;
-    // На тесной карте (аудитория 1-3 этажа) держать всех в 8 клетках от игрока
-    // невозможно — требование постепенно ослабляется, иначе враг спавнится в упор.
     const md = minDist * (i < 300 ? 1 : i < 600 ? .6 : .35);
     if (Math.hypot(x-P.x, y-P.y) < md) continue;
     return {x,y};

@@ -301,12 +301,7 @@ var MAP_COLOR = {
   gun1:"#efe6cc", gun2:"#efe6cc", gun3:"#efe6cc"
 };
 
-// Кэш статичной части миникарты (фон + стены).
-// Ключ — отпечаток GRID и размер клетки: так кэш сам сбрасывается при любой
-// смене карты (новый этаж, полигон отладки), и не нужно помнить, кто и где
-// переписывает GRID. Подсчёт отпечатка — 1225 целочисленных операций,
-// несравнимо дешевле тысячи вызовов fillRect.
-var mapCache = null, mapCacheKey = "";
+var mapCache = null, mapCacheKey = "", mapSigT = 0, mapSig = 0;
 
 function gridSignature(){
   let h = 0;
@@ -320,9 +315,6 @@ function rebuildMapCache(s){
   mapCache.width = w; mapCache.height = h;
   const m = mapCache.getContext("2d");
   m.clearRect(0, 0, w, h);
-  // Прозрачность .62 ставится ВНУТРИ кэша, а на экран кэш кладётся с 1.
-  // Так итоговая смесь получается математически той же, что и раньше,
-  // когда фон и стены рисовались поверх сцены по отдельности с .62.
   m.globalAlpha = .62;
   m.fillStyle = "#0c0709";
   m.fillRect(0, 0, w, h);
@@ -340,12 +332,12 @@ function rebuildMapCache(s){
 function drawMinimap(){
   const s = Math.max(2, Math.round(W/190));
   const ox = 6, oy = 6;
-  const key = gridSignature() + "|" + s;
+  if (--mapSigT <= 0){ mapSig = gridSignature(); mapSigT = 30; }
+  const key = gridVersion + "|" + mapSig + "|" + s;
   if (key !== mapCacheKey){ rebuildMapCache(s); mapCacheKey = key; }
   ctx.globalAlpha = 1;
   ctx.drawImage(mapCache, ox - 2, oy - 2);
 
-  // дальше — только то, что двигается: враги, предметы, игрок
   ctx.globalAlpha = .62;
   ctx.fillStyle = "#a3120b";
   for (const e of enemies){

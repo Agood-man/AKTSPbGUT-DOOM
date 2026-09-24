@@ -1,7 +1,22 @@
 var last = 0, autoSave = 0;
+var fpsOn = false, fpsFrames = 0, fpsAcc = 0, fpsWorst = 0;
+function fpsTick(rawMs){
+  if (!fpsOn) return;
+  fpsFrames++; fpsAcc += rawMs;
+  if (rawMs > fpsWorst) fpsWorst = rawMs;
+  if (fpsAcc >= 1000){
+    const el = document.getElementById("fps");
+    const n = enemies.filter(e => e.alive).length;
+    el.textContent = `${Math.round(fpsFrames * 1000 / fpsAcc)} FPS\nхудший ${fpsWorst.toFixed(0)} мс\nврагов ${n}`;
+    fpsFrames = 0; fpsAcc = 0; fpsWorst = 0;
+  }
+}
+
 function loop(t){
   requestAnimationFrame(loop);
-  const dt = Math.min(.05, (t - last)/1000 || 0); last = t;
+  const rawMs = (t - last) || 0;
+  fpsTick(rawMs);
+  const dt = Math.min(.05, rawMs/1000); last = t;
   if (playing && !paused && !dbgShown){
     update(dt);
     autoSave += dt;
@@ -224,7 +239,6 @@ async function dbgSubmit(){
 }
 
 function debugOpen(v){
-  // Флаг проверяется в игровом цикле: пока панель открыта, update() не идёт.
   dbgShown = v;
   document.getElementById("debug").classList.toggle("gone", !v);
   if (v){
@@ -261,6 +275,7 @@ function dbgRoom(){
   biome = {id:"rooms", name:"ПОЛИГОН"};
   carveRect(3, 3, MW-4, MH-4);
   themeWalls(1);
+  gridVersion++;
   P.x = MW/2; P.y = MH/2; P.hp = 100; P.armor = 100;
   enemies.length = 0; items.length = 0;
   grenades.length = 0; booms.length = 0;
@@ -294,8 +309,6 @@ function dbgItem(kind){
 
 function dbgJump(n){
   markCheat(); sandbox = false;
-  // Только Math.floor, НЕ n|0: побитовые операции режут число до 32 бит,
-  // и всё выше 2 147 483 647 становится отрицательным -> этаж падал в 1.
   const v = Math.floor(Number(n));
   level = Math.min(1e9, Math.max(1, isFinite(v) ? v : 1)) - 1;
   playing = true;
@@ -359,6 +372,12 @@ function initDebug(){
   });
   for (const b of document.querySelectorAll(".dbgsp")) onTap(b, () => dbgSpawn(b.dataset.t));
   for (const b of document.querySelectorAll(".dbgit")) onTap(b, () => dbgItem(b.dataset.k));
+  onTap(document.getElementById("dbgfps"), () => {
+    fpsOn = !fpsOn;
+    document.getElementById("fps").classList.toggle("gone", !fpsOn);
+    document.getElementById("dbgfps").textContent = `FPS: ${fpsOn ? "ВКЛ" : "ВЫКЛ"}`;
+    fpsFrames = 0; fpsAcc = 0; fpsWorst = 0;
+  });
   onTap(document.getElementById("dbgenter"), dbgSubmit);
   document.getElementById("dbgpass").addEventListener("keydown", e => {
     if (e.key === "Enter") dbgSubmit();
@@ -449,8 +468,18 @@ cv.addEventListener("mousedown", e => {
 addEventListener("mouseup", () => mouseHeld = false);
 addEventListener("wheel", e => { if (playing) switchGun(gun + (e.deltaY > 0 ? 1 : -1)); }, {passive:true});
 var lastMouseX = 0;
+var mouseSkip = 0, mouseAvg = 0;
+document.addEventListener("pointerlockchange", () => { mouseSkip = 2; mouseAvg = 0; });
 addEventListener("mousemove", e => {
-  if (document.pointerLockElement === cv){ P.a += e.movementX * .0026; return; }
+  if (document.pointerLockElement === cv){
+    const mx = e.movementX || 0;
+    if (mouseSkip > 0){ mouseSkip--; return; }
+    const a = Math.abs(mx);
+    if (a > 300 || (a > 120 && a > mouseAvg*10 + 60)) return;
+    mouseAvg = mouseAvg*.8 + a*.2;
+    P.a += mx * .0026;
+    return;
+  }
   if (mouseHeld){ P.a += (e.clientX - lastMouseX) * .004; lastMouseX = e.clientX; }
 });
 

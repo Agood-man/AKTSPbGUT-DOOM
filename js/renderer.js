@@ -67,7 +67,8 @@ function flowDir(e){
 }
 
 var ER = .3;
-var enemyGrid = new Map();
+var cellHead = new Int32Array(MW * MH).fill(-1);
+var cellNext = new Int32Array(64);
 function solid(x, y, r){
   return cell(x-r, y-r) || cell(x+r, y-r) || cell(x-r, y+r) || cell(x+r, y+r);
 }
@@ -97,7 +98,7 @@ function castRay(a){
   while (!hit && guard++ < 128){
     if (sdx < sdy){ sdx += ddx; mx += sx; side = 0; }
     else { sdy += ddy; my += sy; side = 1; }
-    hit = cell(mx, my);
+    hit = (mx < 0 || my < 0 || mx >= MW || my >= MH) ? 1 : GRID[my*MW + mx];
   }
   return side === 0 ? (sdx - ddx) : (sdy - ddy);
 }
@@ -163,8 +164,6 @@ function explode(x, y){
   booms.push({x, y, t:0});
   beep("sawtooth", 70, .4, .3, 40);
   noiseBurst(.55, .4, 1400, .7);
-  // Отдельная переменная, НЕ flash: flash включает спрайт дульной вспышки,
-  // и гранатомёт «стрелял» бы в момент разрыва гранаты где-то вдалеке.
   boomLight = 1; boomX = x; boomY = y;
   const R = 3.1, D = 62 * (buff === "rage" ? 2 : 1);
   for (const e of enemies){
@@ -246,9 +245,9 @@ function damagePlayer(amount, sx, sy){
   if (P.hp <= 0) gameOver();
 }
 
-var voiceTokens = 4;               // бюджет голосов врагов
-var VOICE_RATE = 3, VOICE_CAP = 4; // жетонов в секунду / максимум в запасе
-var breathCD = 0;                  // общий кулдаун «дыхания за спиной»
+var voiceTokens = 4;
+var VOICE_RATE = 3, VOICE_CAP = 4;
+var breathCD = 0;
 
 function voiceOK(){
   if (voiceTokens < 1) return false;
@@ -329,8 +328,6 @@ function update(dt){
       if (!e.alive) continue;
       if (segDist(e.x, e.y, ox, oy, b.x, b.y) < HITR(e)){ hitE = e; break; }
     }
-    // Подрыв по пройденному пути, а не только по времени: иначе граната
-    // летела через полкарты. 12 клеток — дальность, 2 с — страховка.
     const flown = Math.hypot(b.x - b.sx, b.y - b.sy);
     if (hitE || solid(b.x, b.y, .1) || flown > 12 || b.t > 2){
       b.dead = true;
@@ -370,7 +367,6 @@ function update(dt){
     const sees = e.sees;
     if (sees && !e.seen && d < 13){
       e.seen = true;
-      // вблизи рык обязателен — это предупреждение; издалека — если есть бюджет
       if (d < 8 || voiceOK()){
       const a = atPos(e.x, e.y);
       const f = k.melee ? (e.type === "bull" ? 90 : 150) : 220;
@@ -392,7 +388,7 @@ function update(dt){
       e.breathT = (e.breathT || 0) - dt;
       if (e.breathT <= 0 && breathCD <= 0){
         e.breathT = .8 + Math.random()*.5;
-        breathCD = .8;                   // одна тварь дышит — остальные ждут
+        breathCD = .8;
         const a = atPos(e.x, e.y);
         noiseBurst(.35, .12, 420, .5, a.pan);
         backT = .5;
@@ -454,15 +450,16 @@ function update(dt){
   }
 
   // Broad-phase collision: only test enemies in the same/adjacent 1x1 cells.
-  enemyGrid.clear();
-  for (let i=0; i<enemies.length; i++){
+  cellHead.fill(-1);
+  if (cellNext.length < enemies.length) cellNext = new Int32Array(enemies.length * 2);
+  for (let i = enemies.length - 1; i >= 0; i--){
     const e = enemies[i];
     if (!e.alive) continue;
     const gx = Math.floor(e.x), gy = Math.floor(e.y);
-    const key = gx * 128 + gy;
-    let bucket = enemyGrid.get(key);
-    if (!bucket){ bucket = []; enemyGrid.set(key, bucket); }
-    bucket.push(i);
+    if (gx < 0 || gy < 0 || gx >= MW || gy >= MH) continue;
+    const c = gy * MW + gx;
+    cellNext[i] = cellHead[c];
+    cellHead[c] = i;
   }
 
   const minD = .62, minD2 = minD * minD;
@@ -471,10 +468,12 @@ function update(dt){
     if (!a.alive) continue;
     const gx = Math.floor(a.x), gy = Math.floor(a.y);
     for (let oy=-1; oy<=1; oy++){
+      const cy = gy + oy;
+      if (cy < 0 || cy >= MH) continue;
       for (let ox=-1; ox<=1; ox++){
-        const bucket = enemyGrid.get((gx + ox) * 128 + (gy + oy));
-        if (!bucket) continue;
-        for (const j of bucket){
+        const cx = gx + ox;
+        if (cx < 0 || cx >= MW) continue;
+        for (let j = cellHead[cy * MW + cx]; j !== -1; j = cellNext[j]){
           if (j <= i) continue;
           const b = enemies[j];
           if (!b.alive) continue;
@@ -490,7 +489,14 @@ function update(dt){
       }
     }
   }
-  enemies = enemies.filter(e => e.alive || e.deadT < 2.6);
+  {
+    let j = 0;
+    for (let i = 0; i < enemies.length; i++){
+      const e = enemies[i];
+      if (e.alive || e.deadT < 2.6) enemies[j++] = e;
+    }
+    enemies.length = j;
+  }
   for (const e of enemies){
     if (!e.alive) e.bloodT = Math.max(0, (e.bloodT || 2.6) - dt);
   }
@@ -504,7 +510,11 @@ function update(dt){
     } else if (solid(b.x, b.y, .1) || cell(b.x, b.y)) b.dead = true;
     if (b.t > 6) b.dead = true;
   }
-  shots = shots.filter(b => !b.dead);
+  {
+    let j = 0;
+    for (let i = 0; i < shots.length; i++) if (!shots[i].dead) shots[j++] = shots[i];
+    shots.length = j;
+  }
 
   for (const it of items){
     it.t += dt;
@@ -538,15 +548,33 @@ function update(dt){
       updateHUD();
     }
   }
-  items = items.filter(i => !i.dead);
+  {
+    let j = 0;
+    for (let i = 0; i < items.length; i++) if (!items[i].dead) items[j++] = items[i];
+    items.length = j;
+  }
 
   if (aliveLeft !== enemiesLeft){ enemiesLeft = aliveLeft; updateHUD(); }
 
   if (aliveLeft === 0 && playing && !sandbox) nextLevel();
 }
 
-var FOG_STYLE = [];
-for (let i = 0; i < 256; i++) FOG_STYLE.push(`rgba(6,4,6,${(i/255).toFixed(3)})`);
+var SPR = [], sprN = 0, drawn = [];
+var byDepth = (a, b) => b.ty - a.ty;
+
+var FOG_LUT_K = 2048, FOG_LUT_MAX = 1.1;
+var FOG_LUT = new Uint8Array(FOG_LUT_K + 1);
+for (let i = 0; i <= FOG_LUT_K; i++){
+  const u = i / FOG_LUT_K * FOG_LUT_MAX;
+  FOG_LUT[i] = (Math.min(.97, Math.pow(u, 1.35) * .93) * 255 + .5) | 0;
+}
+var FOG_IDX_SAT = (.97 * 255 + .5) | 0;
+var FOG_U_MIN = Math.pow(.02 / .93, 1 / 1.35);
+var FOG_STYLE = [], FOG_BLACK = [];
+for (let i = 0; i < 256; i++){
+  FOG_STYLE.push(`rgba(6,4,6,${(i/255).toFixed(3)})`);
+  FOG_BLACK.push(`rgba(0,0,0,${(i/255).toFixed(3)})`);
+}
 
 function render(){
   const dirX = Math.cos(P.a), dirY = Math.sin(P.a);
@@ -564,6 +592,7 @@ function render(){
   g.addColorStop(0, dim(36,26,21, L*.55)); g.addColorStop(1, dim(74,56,44, L));
   ctx.fillStyle = g; ctx.fillRect(0,horizon,W,H-horizon);
 
+  const fogInv = 1 / (7.2 * lightNow), fogK = FOG_LUT_K / FOG_LUT_MAX;
   for (let x=0; x<W; x++){
     const cam = 2*x/W - 1;
     const rdx = dirX + planeX*cam, rdy = dirY + planeY*cam;
@@ -576,7 +605,7 @@ function render(){
     while (!hit && guard++ < 128){
       if (sdx < sdy){ sdx += ddx; mx += sx; side = 0; }
       else { sdy += ddy; my += sy; side = 1; }
-      hit = cell(mx, my);
+      hit = (mx < 0 || my < 0 || mx >= MW || my >= MH) ? 1 : GRID[my*MW + mx];
     }
     const dist = side === 0 ? (sdx - ddx) : (sdy - ddy);
     zbuf[x] = Math.max(.05, dist);
@@ -590,10 +619,15 @@ function render(){
     if ((side === 0 && rdx > 0) || (side === 1 && rdy < 0)) texX = 63 - texX;
     const tex = (TEX[hit] || TEX[1])[side];
     ctx.drawImage(tex, texX, 0, 1, 64, x, horizon - lh/2, 1, lh);
-    const fog = brightMode ? Math.min(.35, zbuf[x]/60)
-              : Math.min(.97, Math.pow(zbuf[x]/(7.2*lightNow), 1.35) * .93);
-    if (fog > .02){
-      ctx.fillStyle = FOG_STYLE[(fog * 255 + .5) | 0];
+    let fi = -1;
+    if (brightMode){
+      if (zbuf[x] > 1.2) fi = (Math.min(.35, zbuf[x]/60) * 255 + .5) | 0;
+    } else {
+      const u = zbuf[x] * fogInv;
+      if (u > FOG_U_MIN) fi = u >= FOG_LUT_MAX ? FOG_IDX_SAT : FOG_LUT[(u * fogK) | 0];
+    }
+    if (fi >= 0){
+      ctx.fillStyle = FOG_STYLE[fi];
       ctx.fillRect(x, y0, 1, y1-y0);
     }
   }
@@ -616,48 +650,50 @@ function render(){
     ctx.globalCompositeOperation = "source-over";
   }
 
-  const list = [];
+  const invDet = 1/(planeX*dirY - dirX*planeY);
+  sprN = 0;
+  drawn.length = 0;
+  const addSprite = (x, y, img, scale, yOff) => {
+    const sx = x - P.x, sy = y - P.y;
+    const ty = invDet*(-planeY*sx + planeX*sy);
+    if (ty <= .15) return null;
+    let o = SPR[sprN];
+    if (!o){ o = {}; SPR[sprN] = o; }
+    sprN++;
+    o.x = x; o.y = y; o.img = img; o.scale = scale; o.yOff = yOff;
+    o.tx = invDet*(dirY*sx - dirX*sy); o.ty = ty;
+    o.hurt = false; o.eyes = false; o.dead = false; o.deadT = 0;
+    o.deadBlood = false; o.bloodT = 0; o.boom = false; o.boomT = 0;
+    drawn.push(o);
+    return o;
+  };
+
   for (const e of enemies){
     const k = KIND[e.type];
     const dead = !e.alive;
-    list.push({
-      x:e.x, y:e.y,
-      img: dead ? ART.corpse[e.type] : ART[k.art][(e.t*4|0) % 2],
-      hurt: !dead && e.hurtT > 0,
-      eyes: !dead && e.seen,
-      scale: dead ? k.scale * .92 : k.scale,
-      yOff: dead ? (.24 + Math.min(.18, e.deadT*.55)) : 0,
-      dead, deadT: e.deadT
-    });
+    const o = addSprite(e.x, e.y,
+      dead ? ART.corpse[e.type] : ART[k.art][(e.t*4|0) % 2],
+      dead ? k.scale * .92 : k.scale,
+      dead ? (.24 + Math.min(.18, e.deadT*.55)) : 0);
+    if (o){
+      o.hurt = !dead && e.hurtT > 0;
+      o.eyes = !dead && e.seen;
+      o.dead = dead; o.deadT = e.deadT;
+    }
     if (dead && e.deadT < 1.15){
-      list.push({
-        x:e.x, y:e.y, img:ART.bloodSplash,
-        scale:k.scale * (.45 + Math.min(.35, e.deadT*.65)),
-        yOff:.47, deadBlood:true, bloodT:e.deadT
-      });
+      const b = addSprite(e.x, e.y, ART.bloodSplash,
+        k.scale * (.45 + Math.min(.35, e.deadT*.65)), .47);
+      if (b){ b.deadBlood = true; b.bloodT = e.deadT; }
     }
   }
-  for (const it of items){
-    list.push({x:it.x, y:it.y, img:ART[it.kind], scale:.55, yOff:.32 + Math.sin(it.t*2)*.02});
-  }
-  for (const b of shots){
-    list.push({x:b.x, y:b.y, img:ART.fireball, scale:.45, yOff:.05});
-  }
-  for (const b of grenades){
-    list.push({x:b.x, y:b.y, img:ART.grenade, scale:.3, yOff:.18});
-  }
+  for (const it of items) addSprite(it.x, it.y, ART[it.kind], .55, .32 + Math.sin(it.t*2)*.02);
+  for (const b of shots) addSprite(b.x, b.y, ART.fireball, .45, .05);
+  for (const b of grenades) addSprite(b.x, b.y, ART.grenade, .3, .18);
   for (const e of booms){
-    list.push({x:e.x, y:e.y, img:ART.boom, scale:1.1 + e.t*4.5, yOff:.05, boom:true, boomT:e.t});
+    const o = addSprite(e.x, e.y, ART.boom, 1.1 + e.t*4.5, .05);
+    if (o){ o.boom = true; o.boomT = e.t; }
   }
-
-  const invDet = 1/(planeX*dirY - dirX*planeY);
-  const drawn = list.map(o => {
-    const sx = o.x - P.x, sy = o.y - P.y;
-    return Object.assign({}, o, {
-      tx: invDet*(dirY*sx - dirX*sy),
-      ty: invDet*(-planeY*sx + planeX*sy)
-    });
-  }).filter(o => o.ty > .15).sort((a,b) => b.ty - a.ty);
+  drawn.sort(byDepth);
 
   for (const o of drawn){
     const screenX = (W/2) * (1 + o.tx/o.ty);
@@ -672,7 +708,7 @@ function render(){
     sctx.save();
     sctx.globalAlpha = o.boom ? Math.max(0, 1 - o.boomT/.45)
                      : o.deadBlood ? Math.max(0, 1 - o.bloodT/1.15) : 1;
-    sctx.filter = `brightness(${bright})`;
+    sctx.filter = (CANVAS_FILTER && bright > 1) ? `brightness(${bright})` : "none";
     if (o.dead && !o.deadBlood){
       const p = Math.min(1, o.deadT / .42);
       const ease = 1 - Math.pow(1-p, 3);
@@ -687,9 +723,9 @@ function render(){
       sctx.drawImage(o.img, 0, 0);
     }
     sctx.restore();
-    if (!CANVAS_FILTER && bright < 1){
+    if (bright < 1){
       sctx.globalCompositeOperation = "source-atop";
-      sctx.fillStyle = `rgba(0,0,0,${(1 - bright).toFixed(3)})`;
+      sctx.fillStyle = FOG_BLACK[((1 - bright) * 255 + .5) | 0];
       sctx.fillRect(0, 0, 64, 64);
       sctx.globalCompositeOperation = "source-over";
     }

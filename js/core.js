@@ -1,6 +1,7 @@
 "use strict";
 
 var MW = 35, MH = 35;
+var gridVersion = 0;
 var GRID = new Uint8Array(MW*MH);
 var rooms = [];
 
@@ -25,8 +26,6 @@ function parseSeed(str){
   const t = String(str || "").trim().replace(/^#/, "");
   if (!t) return null;
   if (/^[0-9a-fA-F]{1,8}$/.test(t)) return parseInt(t, 16) >>> 0;
-  // Поле ввода показывает заглавные только через CSS, а значение остаётся
-  // как набрано. Без приведения «abc» и «ABC» давали разные подземелья.
   const u = t.toUpperCase();
   let h = 0x811c9dc5;
   for (let i=0;i<u.length;i++){ h ^= u.charCodeAt(i); h = Math.imul(h, 0x01000193); }
