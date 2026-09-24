@@ -224,6 +224,7 @@ async function dbgSubmit(){
 }
 
 function debugOpen(v){
+  // Флаг проверяется в игровом цикле: пока панель открыта, update() не идёт.
   dbgShown = v;
   document.getElementById("debug").classList.toggle("gone", !v);
   if (v){
@@ -293,6 +294,8 @@ function dbgItem(kind){
 
 function dbgJump(n){
   markCheat(); sandbox = false;
+  // Только Math.floor, НЕ n|0: побитовые операции режут число до 32 бит,
+  // и всё выше 2 147 483 647 становится отрицательным -> этаж падал в 1.
   const v = Math.floor(Number(n));
   level = Math.min(1e9, Math.max(1, isFinite(v) ? v : 1)) - 1;
   playing = true;

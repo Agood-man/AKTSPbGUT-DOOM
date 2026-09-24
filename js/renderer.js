@@ -163,6 +163,8 @@ function explode(x, y){
   booms.push({x, y, t:0});
   beep("sawtooth", 70, .4, .3, 40);
   noiseBurst(.55, .4, 1400, .7);
+  // Отдельная переменная, НЕ flash: flash включает спрайт дульной вспышки,
+  // и гранатомёт «стрелял» бы в момент разрыва гранаты где-то вдалеке.
   boomLight = 1; boomX = x; boomY = y;
   const R = 3.1, D = 62 * (buff === "rage" ? 2 : 1);
   for (const e of enemies){
@@ -244,7 +246,19 @@ function damagePlayer(amount, sx, sy){
   if (P.hp <= 0) gameOver();
 }
 
+var voiceTokens = 4;               // бюджет голосов врагов
+var VOICE_RATE = 3, VOICE_CAP = 4; // жетонов в секунду / максимум в запасе
+var breathCD = 0;                  // общий кулдаун «дыхания за спиной»
+
+function voiceOK(){
+  if (voiceTokens < 1) return false;
+  voiceTokens -= 1;
+  return true;
+}
+
 function update(dt){
+  voiceTokens = Math.min(VOICE_CAP, voiceTokens + dt*VOICE_RATE);
+  if (breathCD > 0) breathCD -= dt;
   let fw = 0, st = 0;
   if (keys.w || keys.arrowup) fw += 1;
   if (keys.s || keys.arrowdown) fw -= 1;
@@ -315,6 +329,8 @@ function update(dt){
       if (!e.alive) continue;
       if (segDist(e.x, e.y, ox, oy, b.x, b.y) < HITR(e)){ hitE = e; break; }
     }
+    // Подрыв по пройденному пути, а не только по времени: иначе граната
+    // летела через полкарты. 12 клеток — дальность, 2 с — страховка.
     const flown = Math.hypot(b.x - b.sx, b.y - b.sy);
     if (hitE || solid(b.x, b.y, .1) || flown > 12 || b.t > 2){
       b.dead = true;
@@ -354,23 +370,29 @@ function update(dt){
     const sees = e.sees;
     if (sees && !e.seen && d < 13){
       e.seen = true;
+      // вблизи рык обязателен — это предупреждение; издалека — если есть бюджет
+      if (d < 8 || voiceOK()){
       const a = atPos(e.x, e.y);
       const f = k.melee ? (e.type === "bull" ? 90 : 150) : 220;
       beep("sawtooth", f, .35, .14*a.vol, f*.4, a.pan);
       noiseBurst(.3, .11*a.vol, 700, .8, a.pan);
+      }
     }
     e.voiceT = (e.voiceT || 2 + Math.random()*4) - dt;
     if (e.voiceT <= 0 && d < 13){
       e.voiceT = 3 + Math.random()*5;
+      if (voiceOK()){
       const a = atPos(e.x, e.y);
       const f = e.type === "bull" ? 62 : e.type === "caster" ? 190 : 120;
       beep("sawtooth", f, .5, .07*a.vol, f*.55, a.pan);
       if (e.type === "bull") noiseBurst(.4, .05*a.vol, 320, .7, a.pan);
+      }
     }
     if (d < 2.8 && Math.abs(angleDiff(Math.atan2(-dy, -dx), P.a)) > 1.1){
       e.breathT = (e.breathT || 0) - dt;
-      if (e.breathT <= 0){
+      if (e.breathT <= 0 && breathCD <= 0){
         e.breathT = .8 + Math.random()*.5;
+        breathCD = .8;                   // одна тварь дышит — остальные ждут
         const a = atPos(e.x, e.y);
         noiseBurst(.35, .12, 420, .5, a.pan);
         backT = .5;
@@ -523,6 +545,9 @@ function update(dt){
   if (aliveLeft === 0 && playing && !sandbox) nextLevel();
 }
 
+var FOG_STYLE = [];
+for (let i = 0; i < 256; i++) FOG_STYLE.push(`rgba(6,4,6,${(i/255).toFixed(3)})`);
+
 function render(){
   const dirX = Math.cos(P.a), dirY = Math.sin(P.a);
   const planeX = -dirY*.66, planeY = dirX*.66;
@@ -568,7 +593,7 @@ function render(){
     const fog = brightMode ? Math.min(.35, zbuf[x]/60)
               : Math.min(.97, Math.pow(zbuf[x]/(7.2*lightNow), 1.35) * .93);
     if (fog > .02){
-      ctx.fillStyle = `rgba(6,4,6,${fog.toFixed(3)})`;
+      ctx.fillStyle = FOG_STYLE[(fog * 255 + .5) | 0];
       ctx.fillRect(x, y0, 1, y1-y0);
     }
   }
