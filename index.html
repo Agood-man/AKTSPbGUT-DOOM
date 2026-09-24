@@ -105,7 +105,29 @@
     <button id="pauseseedcopy" type="button" style="min-width:0;padding:8px 18px;font-size:12px;
       background:transparent;color:var(--bone);border:2px solid rgba(232,220,192,.35)">СКОПИРОВАТЬ СЕМЯ</button>
     <button id="resume">ПРОДОЛЖИТЬ</button>
+    <button id="settingsbtn2" class="setbtn" type="button">НАСТРОЙКИ</button>
     <button id="quit">В МЕНЮ</button>
+  </div>
+  <div id="settings" class="gone">
+    <h2>НАСТРОЙКИ</h2>
+    <label class="srow"><span>Чувствительность мыши</span><input id="s_sensMouse" type="range" min="20" max="300" step="5"><b id="v_sensMouse"></b></label>
+    <label class="srow"><span>Чувствительность пальца</span><input id="s_sensTouch" type="range" min="20" max="300" step="5"><b id="v_sensTouch"></b></label>
+    <label class="srow"><span>Яркость</span><input id="s_bright" type="range" min="60" max="160" step="5"><b id="v_bright"></b></label>
+    <label class="srow"><span>Громкость</span><input id="s_volume" type="range" min="0" max="100" step="5"><b id="v_volume"></b></label>
+    <label class="srow"><span>Качество картинки</span><input id="s_quality" type="range" min="50" max="100" step="25"><b id="v_quality"></b></label>
+    <label class="srow"><span>Размер кнопок</span><input id="s_ctrlSize" type="range" min="70" max="150" step="5"><b id="v_ctrlSize"></b></label>
+    <label class="srow"><span>Прозрачность кнопок</span><input id="s_ctrlAlpha" type="range" min="25" max="100" step="5"><b id="v_ctrlAlpha"></b></label>
+    <div class="sbtns">
+      <button id="layoutbtn" type="button">РАСПОЛОЖЕНИЕ КНОПОК</button>
+      <button id="setreset" type="button">СБРОСИТЬ ВСЁ</button>
+    </div>
+    <p id="setnote"></p>
+    <button id="setclose" type="button">ГОТОВО</button>
+  </div>
+  <div id="layoutbar" class="gone">
+    <span>Перетаскивай кнопки пальцем</span>
+    <button id="layoutreset" type="button">СБРОС</button>
+    <button id="layoutdone" type="button">ГОТОВО</button>
   </div>
 
   <div id="screen">
@@ -126,6 +148,7 @@
     <p id="seedhint" style="font-size:11px;opacity:.6">Пустое поле — случайное подземелье. Одно семя даёт одни и те же уровни.</p>
     <button id="cont" class="gone">ПРОДОЛЖИТЬ</button>
     <button id="start">НАЧАТЬ</button>
+    <button id="settingsbtn" class="setbtn" type="button">НАСТРОЙКИ</button>
     <p id="rec" style="font-size:12px;opacity:.7"></p>
     <p id="legal">Игра — вымысел и пародия, созданная исключительно для развлечения.
     Она не имеет целью оскорбить кого-либо и никого не призвана задеть.
