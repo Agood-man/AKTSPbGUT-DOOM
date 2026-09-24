@@ -116,6 +116,37 @@
   }
   #pause button:active{background:var(--slime)}
   #quit{background:transparent;color:var(--bone);border:2px solid rgba(232,220,192,.4)}
+  .setbtn{background:transparent!important;color:var(--bone)!important;border:2px solid rgba(232,220,192,.4)!important}
+  #settings{
+    position:absolute;inset:0;z-index:8;display:flex;flex-direction:column;align-items:center;
+    justify-content:flex-start;gap:10px;padding:20px;overflow-y:auto;background:#120c0a;
+    color:var(--bone);text-align:center;
+  }
+  #settings h2{margin:auto 0 4px;font-size:clamp(24px,7vw,40px);letter-spacing:5px;text-shadow:0 3px 0 #000}
+  #settings .srow{display:grid;grid-template-columns:1fr;gap:4px;width:min(360px,92%);font-size:12px;letter-spacing:1px}
+  #settings .srow span{opacity:.8}
+  #settings .srow b{font-size:12px;color:var(--slime);font-weight:normal}
+  #settings input[type=range]{width:100%;accent-color:#c9a227}
+  #settings .sbtns{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:6px}
+  #settings button{
+    padding:10px 14px;font:inherit;font-size:11px;letter-spacing:2px;cursor:pointer;
+    background:transparent;color:var(--bone);border:2px solid rgba(232,220,192,.35);touch-action:manipulation;
+  }
+  #settings #setclose{margin-bottom:auto;min-width:180px;background:var(--bone);color:#1a120e;font-size:14px}
+  #settings #setnote{font-size:11px;opacity:.6;margin:0;min-height:14px}
+  #layoutbar{
+    position:absolute;left:0;right:0;top:calc(70px + env(safe-area-inset-top));z-index:9;
+    display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;
+    font-size:12px;color:var(--bone);text-shadow:0 2px 0 #000;
+  }
+  #layoutbar button{
+    padding:9px 14px;font:inherit;font-size:11px;letter-spacing:2px;cursor:pointer;
+    background:rgba(18,12,10,.85);color:var(--bone);border:2px solid rgba(232,220,192,.45);
+  }
+  body.editing #stick, body.editing #fire, body.editing #swap, body.editing #pausebtn{
+    display:flex!important;outline:2px dashed var(--slime);outline-offset:4px;z-index:9;cursor:move;
+  }
+  body.editing #hud, body.editing #face{opacity:.35}
   #wrap{position:relative;width:100%;height:100%;overflow:hidden}
   canvas{display:block;width:100%;height:100%;
     image-rendering:-webkit-optimize-contrast;image-rendering:pixelated}
@@ -215,6 +246,7 @@
 
   #cont:active{background:var(--bone)}
   .gone{display:none!important}
+  .hidden-edit{display:none!important}
   kbd{background:rgba(232,220,192,.12);border:1px solid rgba(232,220,192,.3);padding:1px 6px;font-size:12px}
 
   @media (orientation:landscape) and (max-height:560px){
