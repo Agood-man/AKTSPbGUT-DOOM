@@ -211,12 +211,14 @@ function switchGun(n){
 
 function canSee(e){
   const dx = e.x - P.x, dy = e.y - P.y;
-  const d = Math.hypot(dx, dy);
-  if (d < .1) return true;
+  const d2 = dx*dx + dy*dy;
+  if (d2 < .01) return true;
+  const d = Math.sqrt(d2);
   const steps = Math.ceil(d * 8);
-  for (let i=1;i<steps;i++){
-    const t = i/steps;
-    if (cell(P.x + dx*t, P.y + dy*t)) return false;
+  const ix = dx / steps, iy = dy / steps;
+  let x = P.x + ix, y = P.y + iy;
+  for (let i=1;i<steps;i++,x+=ix,y+=iy){
+    if (cell(x, y)) return false;
   }
   return true;
 }
@@ -282,15 +284,15 @@ function update(dt){
   ambience(dt);
   updateFace(dt);
   const low = P.hp < 40 ? (1 - P.hp/40) : 0;
-  document.getElementById("lowhp").style.opacity =
+  HUD.lowhp.style.opacity =
     low ? (low * (.45 + .3*Math.sin(clock*6))).toFixed(2) : 0;
 
   if (comboT > 0){
     comboT -= dt;
-    if (comboT <= 0){ combo = 0; document.getElementById("combo").classList.remove("show"); }
+    if (comboT <= 0){ combo = 0; HUD.combo.classList.remove("show"); }
   }
 
-  const buffEl = document.getElementById("buff");
+  const buffEl = HUD.buff;
   if (buff){
     buffT -= dt;
     if (buffT <= 0){ buff = null; buffShown = -1; buffEl.classList.add("gone"); beep("sine", 200, .2, .1); }
@@ -323,8 +325,8 @@ function update(dt){
   for (const e of booms) e.t += dt;
   for (let i=booms.length-1; i>=0; i--) if (booms[i].t > .45) booms.splice(i, 1);
   P.pick = Math.max(0, P.pick - dt*2);
-  document.getElementById("hurt").style.opacity = P.hurt;
-  document.getElementById("pick").style.opacity = P.pick;
+  HUD.hurt.style.opacity = P.hurt;
+  HUD.pick.style.opacity = P.pick;
 
   flowCd -= dt;
   const pCell = (P.y|0)*MW + (P.x|0);
@@ -339,11 +341,17 @@ function update(dt){
     e.t += dt; e.cd -= dt;
     const k = KIND[e.type];
     const dx = P.x - e.x, dy = P.y - e.y;
-    const d = Math.hypot(dx, dy) || 1;
+    const d2 = dx*dx + dy*dy;
+    const d = Math.sqrt(d2) || 1;
 
     const ux = dx/d, uy = dy/d;
     let mx = ux, my = uy;
-    const sees = canSee(e);
+    e.seeT -= dt;
+    if (e.seeT <= 0){
+      e.seeT = .075;
+      e.sees = canSee(e);
+    }
+    const sees = e.sees;
     if (sees && !e.seen && d < 13){
       e.seen = true;
       const a = atPos(e.x, e.y);
@@ -402,7 +410,7 @@ function update(dt){
       const step = e.speed*dt;
       const px = e.x, py = e.y;
       moveEnemy(e, wx*step, wy*step);
-      if (Math.hypot(e.x - px, e.y - py) < step*.5){
+      if ((e.x - px)*(e.x - px) + (e.y - py)*(e.y - py) < step*step*.25){
         e.stuck += dt;
         if (e.stuck > .16){
           e.stuck = 0;
@@ -478,7 +486,8 @@ function update(dt){
 
   for (const it of items){
     it.t += dt;
-    if (Math.hypot(it.x - P.x, it.y - P.y) > PR + .38) continue;
+    const ix = it.x - P.x, iy = it.y - P.y;
+    if (ix*ix + iy*iy > (PR + .38)*(PR + .38)) continue;
     let taken = true;
     if (it.kind === "medkit"){
       if (P.hp >= 100) taken = false; else P.hp = Math.min(100, P.hp + 22);

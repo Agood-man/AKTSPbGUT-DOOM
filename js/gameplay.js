@@ -176,7 +176,7 @@ function nextLevel(){
       t:Math.random()*10, cd:Math.random()*1.5 + .5, deadT:0,
       speed:Math.min(k.speed + level*.03, k.speed*1.28),
       stuck:0, slideT:0, slideDir:1, seen:false, hurtT:0,
-      voiceT:2 + Math.random()*5, breathT:0
+      voiceT:2 + Math.random()*5, breathT:0, seeT:0, sees:false
     });
   }
   enemiesLeft = enemies.length;
