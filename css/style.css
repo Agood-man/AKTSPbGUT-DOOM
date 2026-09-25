@@ -233,6 +233,8 @@
     opacity:.45;margin:2px 0 auto;
   }
   #cont{background:var(--slime);color:#0d1205}
+  #botlink{font-size:12px;opacity:.85;margin:0}
+  #botlink a{color:var(--bone);text-decoration:underline;text-underline-offset:3px}
   #seedrow{display:flex;gap:8px;align-items:stretch}
   #seedbtns{display:flex;gap:8px}
   #seedbtns button{
