@@ -10,7 +10,8 @@ function defaultCtrl(){
 }
 var LMAP = new Float32Array(35 * 35);
 var levelLight = "normal";
-var playerLight = .3;
+var levelL = .9;
+var playerLight = 1;
 var SET_DEFAULT = { sensMouse:1, sensTouch:1, gamma:1, volume:1, quality:1, pos:{} };
 var SET = (() => {
   let s = {};
@@ -26,7 +27,7 @@ var SET = (() => {
       if (s.ctrlAlpha) out.ctrl[k].alpha = s.ctrlAlpha;
     }
   }
-  if (!(out.gamma >= .8 && out.gamma <= 1.25)) out.gamma = 1;
+  if (!(out.gamma >= .8 && out.gamma <= 1.5)) out.gamma = 1;
   delete out.bright; delete out.ctrlSize; delete out.ctrlAlpha;
   return out;
 })();

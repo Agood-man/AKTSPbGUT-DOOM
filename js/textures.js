@@ -23,9 +23,9 @@ function buildLightMap(dep){
   const r = RNG();
   const kind = dep <= 2 ? "normal" : r < .24 ? "dark" : r < .8 ? "normal" : "lit";
   let amb, nl, iMin, iMax;
-  if (kind === "dark"){ amb = .03 + RNG()*.03; nl = 1 + rnd(3); iMin = .45; iMax = .7; }
-  else if (kind === "lit"){ amb = .18 + RNG()*.1; nl = 6 + rnd(5); iMin = .75; iMax = 1.05; }
-  else { amb = .07 + RNG()*.07; nl = 3 + rnd(4); iMin = .55; iMax = .95; }
+  if (kind === "dark"){ levelL = .46 + RNG()*.12; amb = .92; nl = 1 + rnd(3); iMin = .3; iMax = .5; }
+  else if (kind === "lit"){ levelL = 1.0 + RNG()*.15; amb = .95; nl = 5 + rnd(4); iMin = .3; iMax = .5; }
+  else { levelL = .82 + RNG()*.26; amb = .92; nl = 3 + rnd(4); iMin = .28; iMax = .5; }
   if (biome.id === "small") nl = Math.max(1, Math.min(nl, 2));
 
   const N = MW * MH;
@@ -45,7 +45,7 @@ function buildLightMap(dep){
     while (h < tl){
       const v = q[h++], d = dist[v];
       const f = 1 - d / R;
-      if (f > 0) LMAP[v] = Math.min(1.25, LMAP[v] + I * Math.pow(f, 1.6));
+      if (f > 0) LMAP[v] = Math.min(1.35, LMAP[v] + I * Math.pow(f, 1.6));
       if (d + 1 > R) continue;
       const x = v % MW, y = (v / MW) | 0;
       if (x > 0     && !GRID[v-1]  && dist[v-1]  < 0){ dist[v-1]  = d + 1; q[tl++] = v-1; }

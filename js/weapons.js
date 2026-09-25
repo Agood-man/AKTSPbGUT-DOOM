@@ -207,7 +207,7 @@ function drawGun(){
   const y = H - sh*.94 + by + wpnOffset*sh*1.25 + recoil*sh*.05;
 
   const fr = w.frames[wpnFrame] || w.frames[0];
-  const gl = brightMode ? 1 : Math.min(1, .38 + playerLight * .85 * (lightNow / lightBase) + flash * .6);
+  const gl = brightMode ? 1 : Math.min(1, .3 + .7 * levelL * playerLight * (lightNow / lightBase) + flash * .6);
   if (gl < .99){
     gunCtx.clearRect(0, 0, SW, SH);
     gunCtx.drawImage(fr, 0, 0);

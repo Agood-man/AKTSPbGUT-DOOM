@@ -129,7 +129,7 @@ function registerKill(){
 function damageEnemy(e, dmg){
   if (!e.alive) return;
   e.hp -= dmg;
-  e.hurtT = .11;
+  e.hurtT = .14;
   if (e.hp > 0){ beep("triangle", 320, .07, .1); return; }
   e.alive = false; e.deadT = 0; e.bloodT = 2.6;
   registerKill();
@@ -637,16 +637,20 @@ function lightAt(x, y){
 }
 var byDepth = (a, b) => b.ty - a.ty;
 
-var PG_R = 2.6, PG_I = .3;
-var ATT_D = 11, ATT_K = 1024, ATT_MAX = ATT_D * 1.2;
-var ATT = new Float32Array(ATT_K + 1);
-for (let i = 0; i <= ATT_K; i++){
-  const d = i / ATT_K * ATT_MAX;
-  ATT[i] = 1 - Math.min(.97, Math.pow(d / ATT_D, 1.35) * .93);
+var FOG_LUT_K = 2048, FOG_LUT_MAX = 1.1;
+var FOG_LUT = new Uint8Array(FOG_LUT_K + 1);
+var FOG_IDX_SAT = 0, FOG_U_MIN = 0, fogGamma = -1;
+function buildFogLUT(g){
+  fogGamma = g;
+  for (let i = 0; i <= FOG_LUT_K; i++){
+    const u = i / FOG_LUT_K * FOG_LUT_MAX;
+    const fog = Math.min(.97, Math.pow(u, 1.35) * .93);
+    FOG_LUT[i] = ((1 - Math.pow(1 - fog, 1 / g)) * 255 + .5) | 0;
+  }
+  FOG_IDX_SAT = ((1 - Math.pow(.03, 1 / g)) * 255 + .5) | 0;
+  FOG_U_MIN = Math.pow((1 - Math.pow(.98, g)) / .93, 1 / 1.35);
 }
-var ATT_SCALE = ATT_K / ATT_MAX;
-function attenAt(d){ return d >= ATT_MAX ? .03 : ATT[(d * ATT_SCALE) | 0]; }
-var FOG_MAX_IDX = 250;
+buildFogLUT(SET.gamma);
 var FOG_STYLE = [], FOG_BLACK = [];
 for (let i = 0; i < 256; i++){
   FOG_STYLE.push(`rgba(6,4,6,${(i/255).toFixed(3)})`);
@@ -659,9 +663,11 @@ function render(){
   const shakeAmp = (P.hp < 45 ? (1 - P.hp/45)*2.2 : 0) + (P.hitT > 0 ? P.hitT*9 : 0);
   const horizon = H*.5 + (shakeAmp ? Math.sin(clock*17)*shakeAmp + (Math.random()-.5)*shakeAmp*.6 : 0);
 
+  if (fogGamma !== SET.gamma) buildFogLUT(SET.gamma);
   const flick = lightNow / lightBase;
   const invG = 1 / SET.gamma;
-  const L = Math.pow(Math.max(0, (playerLight * .9 + .05) * flick), invG);
+  const fogK = FOG_LUT_K / FOG_LUT_MAX;
+  const L = Math.pow(Math.max(0, levelL * playerLight * flick), invG);
   const mix = (a, b, t) => Math.round(a + (b - a)*t);
   const dim = (r, gg, b, k) => `rgb(${mix(0,r,k)},${mix(0,gg,k)},${mix(0,b,k)})`;
   let g = ctx.createLinearGradient(0,0,0,horizon);
@@ -697,10 +703,14 @@ function render(){
     let texX = (wallX*64) | 0;
     if ((side === 0 && rdx > 0) || (side === 1 && rdy < 0)) texX = 63 - texX;
     const fc = side === 0 ? (my*MW + mx - sx) : ((my - sy)*MW + mx);
-    let Lw = LMAP[fc] || 0;
-    const pgd = 1 - dist / PG_R;
-    if (pgd > 0) Lw += PG_I * pgd * pgd;
-    Lw *= flick;
+    const Lc = levelL * (LMAP[fc] || .8) * flick;
+    let fi = -1;
+    if (brightMode){
+      if (dist > 1.2) fi = (Math.min(.35, dist/60) * 255 + .5) | 0;
+    } else {
+      const u = dist / (7.2 * Lc);
+      if (u > FOG_U_MIN) fi = u >= FOG_LUT_MAX ? FOG_IDX_SAT : FOG_LUT[(u * fogK) | 0];
+    }
 
     TA[x] = 0;
     if (nL){
@@ -715,16 +725,15 @@ function render(){
         if (f > best){ best = f; bestC = LC[i]; }
       }
       if (lit > .02){
-        Lw += lit * .9;
+        if (fi >= 0){
+          fi = (fi * (1 - Math.min(1, lit) * .85)) | 0;
+          if (fi < 5) fi = -1;
+        }
         const a = Math.min(31, (lit * 22) | 0);
         if (a > 0){ TA[x] = a; TC[x] = bestC; TY0[x] = y0; TY1[x] = y1; }
       }
     }
 
-    let b = brightMode ? Math.max(.65, 1 - dist/40) : Math.min(1, Lw) * attenAt(dist);
-    if (!brightMode && invG !== 1) b = Math.pow(b, invG);
-    let fi = b >= .98 ? -1 : Math.min(FOG_MAX_IDX, ((1 - b) * 255 + .5) | 0);
-    if (fi < 5) fi = -1;
     const lvl = fi < 0 ? 0 : Math.max(1, fi >> 2);
     ctx.drawImage(texLevel(hit || 1, side, lvl), texX, 0, 1, 64, x, horizon - lh/2, 1, lh);
   }
@@ -848,14 +857,11 @@ function render(){
     if (brightMode) bright = Math.max(.75, 1 - o.ty/40);
     else {
       const scx = o.x | 0, scy = o.y | 0;
-      let Ls = (scx >= 0 && scy >= 0 && scx < MW && scy < MH) ? LMAP[scy*MW + scx] : 0;
-      const spg = 1 - o.ty / PG_R;
-      if (spg > 0) Ls += PG_I * spg * spg;
-      Ls *= flick;
-      if (nL && !o.emit) Ls += lightAt(o.x, o.y) * .55;
-      bright = Math.min(1.1, Ls) * attenAt(o.ty);
+      const m = (scx >= 0 && scy >= 0 && scx < MW && scy < MH) ? (LMAP[scy*MW + scx] || .8) : .8;
+      const Ls = levelL * m * flick;
+      bright = Math.max(.05, (1 - o.ty/(8.2*Ls)) * Ls);
+      if (nL && !o.emit) bright = Math.min(1.1, bright + lightAt(o.x, o.y) * .55);
       if (bright < 1 && invG !== 1) bright = Math.pow(bright, invG);
-      bright = Math.max(.03, bright);
     }
     if (o.emit) bright = Math.max(bright, 1);
     sctx.clearRect(0,0,64,64);
@@ -890,7 +896,7 @@ function render(){
     }
     if (o.hurt){
       sctx.globalCompositeOperation = "source-atop";
-      sctx.fillStyle = "rgba(255,235,220,.55)";
+      sctx.fillStyle = "rgba(255,238,225,.68)";
       sctx.fillRect(0, 0, 64, 64);
       sctx.globalCompositeOperation = "source-over";
     }
