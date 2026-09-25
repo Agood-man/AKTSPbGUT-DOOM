@@ -330,11 +330,14 @@ function nextLevel(){
   let gunHint = "";
   for (let n=1; n<GUNS.length; n++){
     if (level < GUN_AT[n] || unlocked[n]) continue;
-    const g = freeCell(4);
-    const gx = (g.x | 0), gy = (g.y | 0);
+    const [open8, open4] = openCells();
+    const far = c => Math.hypot((c % MW) + .5 - P.x, ((c / MW) | 0) + .5 - P.y) >= 4;
+    const pool = open8.filter(far).length ? open8.filter(far) : open4.filter(far);
+    let gx, gy;
+    if (pool.length){ const c = pool[(Math.random()*pool.length) | 0]; gx = c % MW; gy = (c / MW) | 0; }
+    else { const g = freeCell(4); gx = g.x | 0; gy = g.y | 0; }
     items.push({kind:"gun" + n, x:gx + .5, y:gy + .5, t:0});
-    const near = LAMPS.findIndex(L => L.x === gx && L.y === gy);
-    if (near >= 0) LAMPS.splice(near, 1);
+    LAMPS = LAMPS.filter(L => Math.hypot(L.x - gx, L.y - gy) >= 5);
     addLamp(gx, gy, 4.5, .85, "on", 0);
     composeLight();
     gunHint = `НА ЭТАЖЕ: ${GUNS[n].name}`;

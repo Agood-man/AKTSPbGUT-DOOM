@@ -45,6 +45,21 @@ function composeLight(){
   }
 }
 
+function openCells(){
+  const open8 = [], open4 = [];
+  for (let y = 1; y < MH - 1; y++){
+    for (let x = 1; x < MW - 1; x++){
+      const i = y*MW + x;
+      if (GRID[i]) continue;
+      const ortho = GRID[i-1] || GRID[i+1] || GRID[i-MW] || GRID[i+MW];
+      if (ortho) continue;
+      const diag = GRID[i-MW-1] || GRID[i-MW+1] || GRID[i+MW-1] || GRID[i+MW+1];
+      if (diag) open4.push(i); else open8.push(i);
+    }
+  }
+  return [open8, open4];
+}
+
 var lampDist = new Int16Array(35 * 35), lampQ = new Int32Array(35 * 35);
 function addLamp(x, y, R, I, state, t0){
   const c = y * MW + x;
@@ -83,21 +98,26 @@ function buildLightMap(dep){
   const N = MW * MH;
   for (let i = 0; i < N; i++) LMAPB[i] = GRID[i] ? 0 : amb;
 
-  const free = [];
-  for (let i = 0; i < N; i++) if (!GRID[i]) free.push(i);
-  const want = Math.max(3, Math.round(free.length / 26));
+  let freeCount = 0;
+  for (let i = 0; i < N; i++) if (!GRID[i]) freeCount++;
+  const want = Math.max(3, Math.round(freeCount / 26));
+  const [open8, open4] = openCells();
   LAMPS = [];
-  for (let t = 0; t < want * 30 && LAMPS.length < want; t++){
-    const c = free[rnd(free.length)];
-    const x = c % MW, y = (c / MW) | 0;
-    let near = false;
-    for (const L of LAMPS) if (Math.abs(L.x - x) + Math.abs(L.y - y) < 5){ near = true; break; }
-    if (near) continue;
-    const R = 3.5 + RNG()*2, I = .5 + RNG()*.3;
-    const roll = RNG();
-    const state = roll < pOn ? "on" : roll < pOn + pFl ? "flicker" : "off";
-    addLamp(x, y, R, I, state, RNG()*4);
-  }
+  const place = (pool, limit) => {
+    for (let t = 0; t < limit * 40 && LAMPS.length < limit && pool.length; t++){
+      const c = pool[rnd(pool.length)];
+      const x = c % MW, y = (c / MW) | 0;
+      let near = false;
+      for (const L of LAMPS) if (Math.hypot(L.x - x, L.y - y) < 4.5){ near = true; break; }
+      if (near) continue;
+      const R = 4.2 + RNG()*2, I = .52 + RNG()*.3;
+      const roll = RNG();
+      const state = roll < pOn ? "on" : roll < pOn + pFl ? "flicker" : "off";
+      addLamp(x, y, R, I, state, RNG()*4);
+    }
+  };
+  place(open8, want);
+  if (LAMPS.length < want * .5) place(open4, Math.ceil(want * .6));
   composeLight();
   levelLight = kind;
 }
