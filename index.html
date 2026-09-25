@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="ПТУ 3D">
 <meta name="theme-color" content="#120c0a">
 
-<link rel="stylesheet" href="css/style.css?v=20260925c">
+<link rel="stylesheet" href="css/style.css?v=20260925e">
 </head>
 <body>
 <div id="wrap">
@@ -20,9 +20,16 @@
   <div id="hurt"></div>
   <div id="lowhp"></div>
   <div id="banner"></div>
+  <div id="bossbar" class="gone"><span id="bossname"></span><div id="bosshp"><i id="bossfill"></i></div><b id="bossnum"></b></div>
+  <div id="bossintro" class="gone"><img id="bossimg" alt=""><div class="bi"><b>БОЙ С БОССОМ</b><span id="bossiname"></span></div></div>
   <button id="pausebtn" class="gone" aria-label="Пауза">❚❚</button>
   <canvas id="face" class="gone" width="40" height="48"></canvas>
   <div id="combo"></div>
+<div id="invbar" class="gone">
+  <button id="inv_rage" type="button" class="inv" data-b="rage"><i></i><b>0</b></button>
+  <button id="inv_haste" type="button" class="inv" data-b="haste"><i></i><b>0</b></button>
+  <button id="inv_shield" type="button" class="inv" data-b="shield"><i></i><b>0</b></button>
+</div>
 <div id="fps" class="gone"></div>
   <div id="buff" class="gone"></div>
   <div id="pick"></div>
@@ -123,6 +130,7 @@
       <button type="button" data-c="swap">СМЕНА</button>
       <button type="button" data-c="pausebtn">ПАУЗА</button>
       <button type="button" data-c="minimap">КАРТА</button>
+      <button type="button" data-c="invbar">УСИЛИТЕЛИ</button>
     </div>
     <label class="srow"><span id="csize_label">Размер кнопки</span><input id="s_csize" type="range" min="60" max="160" step="5"><b id="v_csize"></b></label>
     <label class="srow"><span id="calpha_label">Непрозрачность кнопки</span><input id="s_calpha" type="range" min="20" max="100" step="5"><b id="v_calpha"></b></label>
@@ -144,8 +152,8 @@
     <h1 id="title">ПТУ&nbsp;3D</h1>
     <p id="msg">Каждый уровень генерируется заново: комнаты, коридоры, колонны. Зачистил — проваливаешься в следующий, ещё злее.</p>
     <p style="font-size:12px;opacity:.7">Прогресс сохраняется на входе в каждый уровень. Смерть стирает сохранение, но рекорд остаётся.</p>
-    <p style="font-size:12px">ПК: <kbd>WASD</kbd> ходьба · <kbd>мышь</kbd> обзор · <kbd>ЛКМ</kbd> огонь · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> оружие<br>
-    Телефон: стик слева, «Огонь» справа, «Смена» — оружие, палец по экрану — обзор</p>
+    <p style="font-size:12px">ПК: <kbd>WASD</kbd> ходьба · <kbd>мышь</kbd> обзор · <kbd>ЛКМ</kbd> огонь · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> оружие · <kbd>Z</kbd><kbd>X</kbd><kbd>C</kbd> усилители<br>
+    Телефон: стик слева, «Огонь» справа, «Смена» — оружие, палец по экрану — обзор, кружки справа — усилители</p>
     <p id="botlink">Предложения по игре и новым мобам —
       <a href="https://t.me/suggestionAKT_bot" target="_blank" rel="noopener" style="color:#e8dcc0">@suggestionAKT_bot</a></p>
     <div id="seedrow">
@@ -170,16 +178,17 @@
 </div>
 
 
-<script src="js/core.js?v=20260925c"></script>
-<script src="js/textures.js?v=20260925c"></script>
-<script src="js/audio.js?v=20260925c"></script>
-<script src="js/state.js?v=20260925c"></script>
-<script src="js/gameplay.js?v=20260925c"></script>
-<script src="js/renderer.js?v=20260925c"></script>
-<script src="js/face.js?v=20260925c"></script>
-<script src="js/weapons.js?v=20260925c"></script>
-<script src="js/ui.js?v=20260925c"></script>
-<script src="js/main.js?v=20260925c"></script>
+<script src="js/embedded.js?v=20260925e"></script>
+<script src="js/core.js?v=20260925e"></script>
+<script src="js/textures.js?v=20260925e"></script>
+<script src="js/audio.js?v=20260925e"></script>
+<script src="js/state.js?v=20260925e"></script>
+<script src="js/gameplay.js?v=20260925e"></script>
+<script src="js/renderer.js?v=20260925e"></script>
+<script src="js/face.js?v=20260925e"></script>
+<script src="js/weapons.js?v=20260925e"></script>
+<script src="js/ui.js?v=20260925e"></script>
+<script src="js/main.js?v=20260925e"></script>
 <script>
 (function(){
   var CF_TOKEN = "990785e2778e46c89a8bcc756ab1f7a5";
