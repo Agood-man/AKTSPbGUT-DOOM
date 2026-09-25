@@ -208,7 +208,7 @@
   #screen.hide{display:none}
   #deathbg{
     position:absolute;inset:0;
-    background-image:url("../assets/images/deathbg.jpg");
+    background-image:url("../assets/ui/deathbg.jpg");
     background-size:cover;background-position:center;
     filter:grayscale(.3) contrast(1.1);
     opacity:0;transition:opacity .6s;
