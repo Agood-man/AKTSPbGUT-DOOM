@@ -561,6 +561,14 @@ function update(dt){
 }
 
 var SPR = [], sprN = 0, drawn = [];
+var EYE_STYLE = [];
+for (let i = 0; i < 64; i++) EYE_STYLE.push(`rgba(190,30,20,${(i/63).toFixed(3)})`);
+function eyeVisible(x, w, ty){
+  const a = Math.max(0, Math.floor(x)), b = Math.min(W - 1, Math.ceil(x + w) - 1);
+  if (a > b) return false;
+  for (let c = a; c <= b; c++) if (ty >= zbuf[c]) return false;
+  return true;
+}
 
 var TEXD = {};
 function texLevel(hit, side, lvl){
@@ -629,14 +637,20 @@ function lightAt(x, y){
 }
 var byDepth = (a, b) => b.ty - a.ty;
 
+var WORLD_LIGHT = .6;
 var FOG_LUT_K = 2048, FOG_LUT_MAX = 1.1;
 var FOG_LUT = new Uint8Array(FOG_LUT_K + 1);
-for (let i = 0; i <= FOG_LUT_K; i++){
-  const u = i / FOG_LUT_K * FOG_LUT_MAX;
-  FOG_LUT[i] = (Math.min(.97, Math.pow(u, 1.35) * .93) * 255 + .5) | 0;
+var FOG_IDX_SAT = 0, FOG_U_MIN = 0, fogGamma = -1;
+function buildFogLUT(g){
+  fogGamma = g;
+  for (let i = 0; i <= FOG_LUT_K; i++){
+    const u = i / FOG_LUT_K * FOG_LUT_MAX;
+    FOG_LUT[i] = (Math.pow(Math.min(.97, Math.pow(u, 1.35) * .93), g) * 255 + .5) | 0;
+  }
+  FOG_IDX_SAT = (Math.pow(.97, g) * 255 + .5) | 0;
+  FOG_U_MIN = Math.pow(Math.pow(.02, 1/g) / .93, 1 / 1.35);
 }
-var FOG_IDX_SAT = (.97 * 255 + .5) | 0;
-var FOG_U_MIN = Math.pow(.02 / .93, 1 / 1.35);
+buildFogLUT(SET.gamma);
 var FOG_STYLE = [], FOG_BLACK = [];
 for (let i = 0; i < 256; i++){
   FOG_STYLE.push(`rgba(6,4,6,${(i/255).toFixed(3)})`);
@@ -649,8 +663,9 @@ function render(){
   const shakeAmp = (P.hp < 45 ? (1 - P.hp/45)*2.2 : 0) + (P.hitT > 0 ? P.hitT*9 : 0);
   const horizon = H*.5 + (shakeAmp ? Math.sin(clock*17)*shakeAmp + (Math.random()-.5)*shakeAmp*.6 : 0);
 
-  const LV = lightNow * SET.bright;
-  const L = LV;
+  if (fogGamma !== SET.gamma) buildFogLUT(SET.gamma);
+  const LV = lightNow * WORLD_LIGHT;
+  const L = Math.pow(Math.max(0, LV), 1 / SET.gamma);
   const mix = (a, b, t) => Math.round(a + (b - a)*t);
   const dim = (r, gg, b, k) => `rgb(${mix(0,r,k)},${mix(0,gg,k)},${mix(0,b,k)})`;
   let g = ctx.createLinearGradient(0,0,0,horizon);
@@ -837,13 +852,13 @@ function render(){
 
     let bright = brightMode ? Math.max(.75, 1 - o.ty/40)
                : Math.max(.05, (1 - o.ty/(8.2*LV)) * LV);
+    if (bright < 1 && SET.gamma !== 1) bright = Math.pow(bright, 1 / SET.gamma);
     if (o.emit) bright = Math.max(bright, 1);
     else if (nL) bright = Math.min(1.1, bright + lightAt(o.x, o.y) * .55);
     sctx.clearRect(0,0,64,64);
     sctx.save();
     sctx.globalAlpha = o.boom ? Math.max(0, 1 - o.boomT/.45)
                      : o.deadBlood ? Math.max(0, 1 - o.bloodT/1.15) : 1;
-    sctx.filter = (CANVAS_FILTER && bright > 1) ? `brightness(${bright})` : "none";
     if (o.dead && !o.deadBlood){
       const p = Math.min(1, o.deadT / .42);
       const ease = 1 - Math.pow(1-p, 3);
@@ -858,7 +873,13 @@ function render(){
       sctx.drawImage(o.img, 0, 0);
     }
     sctx.restore();
-    if (bright < 1){
+    if (bright > 1){
+      sctx.globalCompositeOperation = "lighter";
+      sctx.globalAlpha = Math.min(1, bright - 1);
+      sctx.drawImage(shade, 0, 0);
+      sctx.globalAlpha = 1;
+      sctx.globalCompositeOperation = "source-over";
+    } else if (bright < 1){
       sctx.globalCompositeOperation = "source-atop";
       sctx.fillStyle = FOG_BLACK[((1 - bright) * 255 + .5) | 0];
       sctx.fillRect(0, 0, 64, 64);
@@ -870,7 +891,6 @@ function render(){
       sctx.fillRect(0, 0, 64, 64);
       sctx.globalCompositeOperation = "source-over";
     }
-    sctx.filter = "none";
     sctx.globalAlpha = 1;
 
     const from = Math.max(0, Math.floor(x0)), to = Math.min(W, Math.ceil(x0+sw));
@@ -893,15 +913,16 @@ function render(){
     }
 
     if (o.eyes && bright < .4 && o.ty < 17){
-      const col = screenX | 0;
-      if (col >= 0 && col < W && o.ty < zbuf[col]){
-        const ew = Math.max(1, sh*.055), eh = Math.max(1, sh*.04);
-        const ey = y0 + sh*.46;
+      const ew = Math.max(1, sh*.055), eh = Math.max(1, sh*.04);
+      const ey = y0 + sh*.46;
+      const exL = screenX - sh*.17, exR = screenX + sh*.17 - ew;
+      const visL = eyeVisible(exL, ew, o.ty), visR = eyeVisible(exR, ew, o.ty);
+      if (visL || visR){
         const glow = Math.min(.95, (.34 - bright)*3.2) * (.75 + .25*Math.sin(clock*9 + o.x));
         ctx.globalCompositeOperation = "lighter";
-        ctx.fillStyle = `rgba(190,30,20,${glow.toFixed(2)})`;
-        ctx.fillRect(screenX - sh*.17, ey, ew, eh);
-        ctx.fillRect(screenX + sh*.17 - ew, ey, ew, eh);
+        ctx.fillStyle = EYE_STYLE[(glow * 63 + .5) | 0];
+        if (visL) ctx.fillRect(exL, ey, ew, eh);
+        if (visR) ctx.fillRect(exR, ey, ew, eh);
         ctx.globalCompositeOperation = "source-over";
       }
     }

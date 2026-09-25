@@ -2,12 +2,29 @@
 
 var MW = 35, MH = 35;
 var SET_KEY = "terplandia3d.settings";
-var SET_DEFAULT = { sensMouse:1, sensTouch:1, bright:1, volume:1, quality:1, ctrlSize:1, ctrlAlpha:1, pos:{} };
+var CTRL_KEYS = ["stick", "fire", "swap", "pausebtn"];
+function defaultCtrl(){
+  const c = {};
+  for (const k of CTRL_KEYS) c[k] = { size:1, alpha:1 };
+  return c;
+}
+var SET_DEFAULT = { sensMouse:1, sensTouch:1, gamma:1, volume:1, quality:1, pos:{} };
 var SET = (() => {
   let s = {};
   try { s = JSON.parse(localStorage.getItem(SET_KEY)) || {}; } catch(e){}
   const out = Object.assign({}, SET_DEFAULT, s);
   out.pos = Object.assign({}, (s && s.pos) || {});
+  out.ctrl = defaultCtrl();
+  for (const k of CTRL_KEYS){
+    const src = s && s.ctrl && s.ctrl[k];
+    if (src) Object.assign(out.ctrl[k], src);
+    else if (s && k !== "pausebtn"){
+      if (s.ctrlSize) out.ctrl[k].size = s.ctrlSize;
+      if (s.ctrlAlpha) out.ctrl[k].alpha = s.ctrlAlpha;
+    }
+  }
+  if (!(out.gamma >= .8 && out.gamma <= 1.25)) out.gamma = 1;
+  delete out.bright; delete out.ctrlSize; delete out.ctrlAlpha;
   return out;
 })();
 function saveSettings(){ try { localStorage.setItem(SET_KEY, JSON.stringify(SET)); } catch(e){} }

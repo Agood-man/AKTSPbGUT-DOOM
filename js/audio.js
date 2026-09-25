@@ -311,12 +311,24 @@ var dmgBonus = () => level <= 10 ? level*.6 : 6 + 10*Math.pow((depth()-10)/140, 
 var rateMul = () => 1 - .28*Math.pow(t150(), .6);
 
 var isSurge = () => level > 0 && level % 5 === 0;
+
+function countRange(){
+  if (level <= 3){ const n = Math.round((4 + Math.round(level*1.5)) * .7); return [n, n]; }
+  const center = level <= 10 ? 4 + level*1.5
+               : 19 + 17*Math.pow((depth()-10)/140, .7);
+  const spread = level < 10 ? 1 : 2;
+  return [Math.round(center - spread), Math.round(center + spread)];
+}
+
+function enemyCount(){
+  const [lo, hi] = countRange();
+  if (isSurge()) return hi;
+  const r = mulberry32((runSeed ^ Math.imul(level + 11, 0x85EBCA6B)) >>> 0)();
+  return lo + Math.floor(r * (hi - lo + 1));
+}
 var curve = () => ({
   surge: isSurge(),
-  count:   Math.round(Math.min(30, level <= 10 ? 4 + Math.round(level*1.5)
-                                : 19 + Math.round(11*Math.pow((depth()-10)/140, .7)))
-                      * (isSurge() ? 1.2 : 1)
-                      * (level <= 3 ? .7 : 1)),
+  count:   enemyCount(),
   hpBonus: type => Math.floor(ramp(type === "bull" ? 60 : type === "caster" ? 30 : 25, .55)),
   bulls:   level >= 2 ? .12 + ramp(.28, .4) : 0,
   casters: level >= 3 ? .08 + ramp(.26, .4) + (isSurge() ? .08 : 0) : 0,

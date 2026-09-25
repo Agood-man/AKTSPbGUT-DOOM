@@ -20,8 +20,8 @@ function applyControls(){
   for (const id of CTRL_IDS){
     const el = document.getElementById(id);
     const p = SET.pos[id];
-    const scale = id === "pausebtn" ? 1 : SET.ctrlSize;
-    el.style.opacity = id === "pausebtn" ? "" : SET.ctrlAlpha;
+    const scale = SET.ctrl[id].size;
+    el.style.opacity = SET.ctrl[id].alpha;
     if (p){
       el.style.left = (p.x*100) + "%"; el.style.top = (p.y*100) + "%";
       el.style.right = "auto"; el.style.bottom = "auto";
@@ -37,9 +37,21 @@ function applyControls(){
 
 var SLIDERS = {
   sensMouse: [100, v => v + "%"], sensTouch: [100, v => v + "%"],
-  bright: [100, v => v + "%"], volume: [100, v => v + "%"],
-  quality: [100, v => v + "%"], ctrlSize: [100, v => v + "%"], ctrlAlpha: [100, v => v + "%"]
+  gamma: [100, v => v + "%"], volume: [100, v => v + "%"],
+  quality: [100, v => v + "%"]
 };
+var ctrlSel = "stick";
+
+function syncCtrlUI(){
+  const c = SET.ctrl[ctrlSel];
+  const vs = Math.round(c.size * 100), va = Math.round(c.alpha * 100);
+  document.getElementById("s_csize").value = vs;
+  document.getElementById("v_csize").textContent = vs + "%";
+  document.getElementById("s_calpha").value = va;
+  document.getElementById("v_calpha").textContent = va + "%";
+  for (const b of document.querySelectorAll(".ctabs button"))
+    b.classList.toggle("on", b.dataset.c === ctrlSel);
+}
 var settingsFrom = null;
 
 function syncSettingsUI(){
@@ -48,6 +60,7 @@ function syncSettingsUI(){
     document.getElementById("s_" + k).value = v;
     document.getElementById("v_" + k).textContent = SLIDERS[k][1](v);
   }
+  syncCtrlUI();
   document.getElementById("setnote").textContent =
     HAS_TOUCH ? "" : "Расположение кнопок настраивается на сенсорных устройствах";
 }
@@ -89,7 +102,17 @@ function initSettings(){
       document.getElementById("v_" + k).textContent = SLIDERS[k][1](v);
       if (k === "volume") applyVolume();
       if (k === "quality") resize();
-      if (k === "ctrlSize" || k === "ctrlAlpha") applyControls();
+    });
+    input.addEventListener("change", saveSettings);
+  }
+  for (const b of document.querySelectorAll(".ctabs button"))
+    onTap(b, () => { ctrlSel = b.dataset.c; syncCtrlUI(); });
+  for (const [id, key] of [["s_csize", "size"], ["s_calpha", "alpha"]]){
+    const input = document.getElementById(id);
+    input.addEventListener("input", () => {
+      SET.ctrl[ctrlSel][key] = +input.value / 100;
+      document.getElementById(id === "s_csize" ? "v_csize" : "v_calpha").textContent = input.value + "%";
+      applyControls();
     });
     input.addEventListener("change", saveSettings);
   }
@@ -98,7 +121,7 @@ function initSettings(){
   onTap(document.getElementById("setclose"), closeSettings);
   onTap(document.getElementById("setreset"), () => {
     const keep = SET;
-    Object.assign(keep, SET_DEFAULT, { pos:{} });
+    Object.assign(keep, SET_DEFAULT, { pos:{}, ctrl: defaultCtrl() });
     applyVolume(); resize(); applyControls(); syncSettingsUI(); saveSettings();
   });
   onTap(document.getElementById("layoutbtn"), startLayoutEdit);
@@ -613,7 +636,7 @@ addEventListener("touchmove", e => {
     if (t.identifier === stickId){
       const r = stick.getBoundingClientRect();
       let dx = t.clientX - (r.left + r.width/2), dy = t.clientY - (r.top + r.height/2);
-      const m = Math.min(1, Math.hypot(dx,dy)/(46 * SET.ctrlSize)), ang = Math.atan2(dy,dx);
+      const m = Math.min(1, Math.hypot(dx,dy)/(46 * SET.ctrl.stick.size)), ang = Math.atan2(dy,dx);
       dx = Math.cos(ang)*m; dy = Math.sin(ang)*m;
       knob.style.transform = `translate(${dx*36}px,${dy*36}px)`;
       touch.st = dx; touch.fw = -dy;
