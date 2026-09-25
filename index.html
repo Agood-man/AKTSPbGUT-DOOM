@@ -15,6 +15,8 @@
 <body>
 <div id="wrap">
   <canvas id="c"></canvas>
+  <canvas id="xhair"></canvas>
+  <canvas id="minimap"></canvas>
   <div id="hurt"></div>
   <div id="lowhp"></div>
   <div id="banner"></div>
@@ -120,18 +122,19 @@
       <button type="button" data-c="fire">ОГОНЬ</button>
       <button type="button" data-c="swap">СМЕНА</button>
       <button type="button" data-c="pausebtn">ПАУЗА</button>
+      <button type="button" data-c="minimap">КАРТА</button>
     </div>
     <label class="srow"><span id="csize_label">Размер кнопки</span><input id="s_csize" type="range" min="60" max="160" step="5"><b id="v_csize"></b></label>
     <label class="srow"><span id="calpha_label">Непрозрачность кнопки</span><input id="s_calpha" type="range" min="20" max="100" step="5"><b id="v_calpha"></b></label>
     <div class="sbtns">
-      <button id="layoutbtn" type="button">РАСПОЛОЖЕНИЕ КНОПОК</button>
+      <button id="layoutbtn" type="button">РАСПОЛОЖЕНИЕ</button>
       <button id="setreset" type="button">СБРОСИТЬ ВСЁ</button>
     </div>
     <p id="setnote"></p>
     <button id="setclose" type="button">ГОТОВО</button>
   </div>
   <div id="layoutbar" class="gone">
-    <span>Перетаскивай кнопки пальцем</span>
+    <span>Перетаскивай кнопки и карту</span>
     <button id="layoutreset" type="button">СБРОС</button>
     <button id="layoutdone" type="button">ГОТОВО</button>
   </div>
