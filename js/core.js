@@ -9,6 +9,9 @@ function defaultCtrl(){
   return c;
 }
 var LMAP = new Float32Array(35 * 35);
+var LMAPB = new Float32Array(35 * 35);
+var LMAPR = new Float32Array(35 * 35);
+var LAMPS = [];
 var levelLight = "normal";
 var levelL = .9;
 var playerLight = 1;

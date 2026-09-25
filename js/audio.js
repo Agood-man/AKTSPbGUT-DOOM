@@ -245,6 +245,37 @@ enemyImage.onload = () => {
   }
 };
 
+function drawFallbackEnemy(g){
+  g.clearRect(0, 0, 64, 64);
+  g.fillStyle = "#2e211c"; g.fillRect(10, 30, 44, 34);
+  g.fillStyle = "#5e4234"; g.fillRect(16, 6, 32, 30);
+  g.fillStyle = "#402c23"; g.fillRect(16, 6, 32, 6);
+  g.fillStyle = "#c8160e"; g.fillRect(22, 18, 7, 5); g.fillRect(35, 18, 7, 5);
+  g.fillStyle = "#ffd0c0"; g.fillRect(24, 19, 2, 2); g.fillRect(37, 19, 2, 2);
+  g.fillStyle = "#140a08"; g.fillRect(24, 28, 16, 4);
+  g.fillStyle = "#e8dcc0"; g.fillRect(26, 28, 3, 2); g.fillRect(35, 28, 3, 2);
+}
+
+var enemyRetry = false;
+enemyImage.onerror = () => {
+  if (!enemyRetry){
+    enemyRetry = true;
+    enemyImage.src = "assets/images/enemy.jpg?r=" + Date.now();
+    return;
+  }
+  drawFallbackEnemy(ENEMY_SPRITE.getContext("2d"));
+  for (const type of ["imp","bull","caster"]){
+    const cg = ART.corpse[type].getContext("2d");
+    cg.clearRect(0,0,64,64);
+    cg.imageSmoothingEnabled = false;
+    cg.save();
+    cg.translate(32,42);
+    cg.rotate(Math.PI/2);
+    cg.drawImage(ENEMY_SPRITE,-28,-28,56,56);
+    cg.restore();
+  }
+};
+
 function gunItem(color, label){
   const [s,g] = blank();
   g.fillStyle = "rgba(0,0,0,.45)"; g.fillRect(10, 22, 44, 30);

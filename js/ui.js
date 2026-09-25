@@ -421,7 +421,8 @@ function dbgRoom(){
   enemies.length = 0; items.length = 0;
   grenades.length = 0; booms.length = 0;
   enemiesLeft = 0;
-  for (let i = 0; i < MW*MH; i++) LMAP[i] = GRID[i] ? 0 : 1;
+  LAMPS = [];
+  for (let i = 0; i < MW*MH; i++) LMAP[i] = LMAPB[i] = GRID[i] ? 0 : 1;
   levelLight = "lit"; levelL = 1.2; playerLight = 1;
   lightBase = 1; lightNow = 1;
   flickerT = 999; flickerLeft = 0; darkLevel = false;

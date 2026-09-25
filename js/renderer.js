@@ -586,11 +586,23 @@ function texLevel(hit, side, lvl){
   return c;
 }
 
-var LIGHT_COLORS = [[255,120,40], [210,55,30], [230,196,40], [70,165,215], [255,150,60]];
+var LIGHT_COLORS = [[255,120,40], [210,55,30], [230,196,40], [70,165,215], [255,150,60], [255,214,150]];
+function lampArt(on){
+  const c = document.createElement("canvas"); c.width = c.height = 64;
+  const g = c.getContext("2d");
+  g.fillStyle = "#1c1a18"; g.fillRect(29, 0, 6, 20);
+  g.fillStyle = "#34302b"; g.fillRect(16, 18, 32, 10);
+  g.fillStyle = "#4a443c"; g.fillRect(16, 18, 32, 3);
+  g.fillStyle = on ? "#fff4d6" : "#3a3833";
+  g.fillRect(22, 28, 20, 9);
+  if (on){ g.fillStyle = "#ffd98a"; g.fillRect(24, 30, 16, 5); }
+  return c;
+}
+var LAMP_ON = lampArt(true), LAMP_OFF = lampArt(false);
 var BUFF_LIGHT = { rage:1, haste:2, shield:3 };
 var TINT = LIGHT_COLORS.map(([r,g,b]) => {
   const a = [];
-  for (let i = 0; i < 32; i++) a.push(`rgba(${r},${g},${b},${(i/31*.55).toFixed(3)})`);
+  for (let i = 0; i < 32; i++) a.push(`rgba(${r},${g},${b},${(i/31*.3).toFixed(3)})`);
   return a;
 });
 var GLOW = LIGHT_COLORS.map(([r,g,b]) => {
@@ -617,12 +629,12 @@ function addLight(x, y, r, inten, color, yOff){
 
 function collectLights(){
   nL = 0;
-  for (const b of shots) addLight(b.x, b.y, 3.2, 1, 0, .05);
+  for (const b of shots) addLight(b.x, b.y, 2.4, .42, 0, .05);
   for (const it of items){
     const c = BUFF_LIGHT[it.kind];
-    if (c !== undefined) addLight(it.x, it.y, 2.8, .85 * (.8 + .2*Math.sin(clock*5 + it.x)), c, .32);
+    if (c !== undefined) addLight(it.x, it.y, 2.4, .45 * (.8 + .2*Math.sin(clock*5 + it.x)), c, .32);
   }
-  for (const e of booms) addLight(e.x, e.y, 5.5, 1.6 * Math.max(0, 1 - e.t/.45), 4, .05);
+  for (const e of booms) addLight(e.x, e.y, 5, 1.2 * Math.max(0, 1 - e.t/.45), 4, .05);
 }
 
 function lightAt(x, y){
@@ -726,7 +738,7 @@ function render(){
       }
       if (lit > .02){
         if (fi >= 0){
-          fi = (fi * (1 - Math.min(1, lit) * .85)) | 0;
+          fi = (fi * (1 - Math.min(1, lit) * .6)) | 0;
           if (fi < 5) fi = -1;
         }
         const a = Math.min(31, (lit * 22) | 0);
@@ -808,16 +820,25 @@ function render(){
     const c = BUFF_LIGHT[it.kind];
     if (o && c !== undefined){
       o.emit = true;
-      const g = addSprite(it.x, it.y, GLOW[c], 1.5, .32);
-      if (g){ g.glow = c; g.glowA = .75 + .25*Math.sin(clock*5 + it.x); }
+      const g = addSprite(it.x, it.y, GLOW[c], 1.1, .32);
+      if (g){ g.glow = c; g.glowA = .4 + .12*Math.sin(clock*5 + it.x); }
+    }
+  }
+  for (const L of LAMPS){
+    const lit = L.val > .5;
+    const o = addSprite(L.x + .5, L.y + .5, lit ? LAMP_ON : LAMP_OFF, .34, -.36);
+    if (o && lit){
+      o.emit = true;
+      const g = addSprite(L.x + .5, L.y + .5, GLOW[5], .9, -.33);
+      if (g){ g.glow = 5; g.glowA = .38 * L.val; }
     }
   }
   for (const b of shots){
     const o = addSprite(b.x, b.y, ART.fireball, .45, .05);
     if (o){
       o.emit = true;
-      const g = addSprite(b.x, b.y, GLOW[0], 1.35, .05);
-      if (g){ g.glow = 0; g.glowA = .9; }
+      const g = addSprite(b.x, b.y, GLOW[0], .95, .05);
+      if (g){ g.glow = 0; g.glowA = .4; }
     }
   }
   for (const b of grenades) addSprite(b.x, b.y, ART.grenade, .3, .18);
@@ -921,8 +942,8 @@ function render(){
       }
     }
 
-    if (o.eyes && bright < .4 && o.ty < 17){
-      const ew = Math.max(1, sh*.055), eh = Math.max(1, sh*.04);
+    if (o.eyes && bright < .4 && o.ty > 2.4 && o.ty < 17){
+      const ew = Math.max(1, Math.min(4, sh*.055)), eh = Math.max(1, Math.min(3, sh*.04));
       const ey = y0 + sh*.46;
       const exL = screenX - sh*.17, exR = screenX + sh*.17 - ew;
       const visL = eyeVisible(exL, ew, o.ty), visR = eyeVisible(exR, ew, o.ty);

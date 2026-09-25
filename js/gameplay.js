@@ -53,7 +53,33 @@ var lightNow = 1;
 var flickerT = 0, flickerLeft = 0, darkLevel = false;
 var backT = 0;
 
+function updateLamps(dt){
+  let changed = false;
+  for (const L of LAMPS){
+    if (L.state !== "flicker") continue;
+    L.t -= dt;
+    if (L.t > 0) continue;
+    changed = true;
+    if (L.blink > 0){
+      L.blink--;
+      L.val = L.val > .5 ? .05 + Math.random()*.2 : 1;
+      L.t = .04 + Math.random()*.1;
+      if (L.blink === 0){ L.val = 1; L.t = 1 + Math.random()*4; }
+    } else {
+      L.blink = 3 + (Math.random()*8 | 0);
+      L.val = .1; L.t = .05;
+      const dx = L.x + .5 - P.x, dy = L.y + .5 - P.y;
+      if (dx*dx + dy*dy < 49 && AC){
+        const a = atPos(L.x + .5, L.y + .5);
+        noiseBurst(.08, .04 * a.vol, 3200, 1, a.pan);
+      }
+    }
+  }
+  if (changed) composeLight();
+}
+
 function updateLight(dt){
+  updateLamps(dt);
   if (brightMode){ lightNow = lightBase = 2.4; return; }
   if (boomLight > .04){
     const d = Math.hypot(boomX - P.x, boomY - P.y);
@@ -225,7 +251,7 @@ function nextLevel(){
   lightBase = brightMode ? 2.4 : 1;
   lightNow = lightBase;
   playerLight = LMAP[(P.y|0)*MW + (P.x|0)] || .1;
-  flickerT = 2; flickerLeft = 0;
+  flickerT = 1e9; flickerLeft = 0;
   stat = {fired:0, hit:0, t:0, n:enemies.length};
   combo = 0; comboT = 0;
   HUD.combo.classList.remove("show");
