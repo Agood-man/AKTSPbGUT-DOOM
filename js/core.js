@@ -2,12 +2,15 @@
 
 var MW = 35, MH = 35;
 var SET_KEY = "terplandia3d.settings";
-var CTRL_KEYS = ["stick", "fire", "swap", "pausebtn"];
+var CTRL_KEYS = ["stick", "fire", "swap", "pausebtn", "minimap"];
 function defaultCtrl(){
   const c = {};
-  for (const k of CTRL_KEYS) c[k] = { size:1, alpha:1 };
+  for (const k of CTRL_KEYS) c[k] = { size:1, alpha: k === "minimap" ? .62 : 1 };
   return c;
 }
+var LMAP = new Float32Array(35 * 35);
+var levelLight = "normal";
+var playerLight = .3;
 var SET_DEFAULT = { sensMouse:1, sensTouch:1, gamma:1, volume:1, quality:1, pos:{} };
 var SET = (() => {
   let s = {};
@@ -18,7 +21,7 @@ var SET = (() => {
   for (const k of CTRL_KEYS){
     const src = s && s.ctrl && s.ctrl[k];
     if (src) Object.assign(out.ctrl[k], src);
-    else if (s && k !== "pausebtn"){
+    else if (s && k !== "pausebtn" && k !== "minimap"){
       if (s.ctrlSize) out.ctrl[k].size = s.ctrlSize;
       if (s.ctrlAlpha) out.ctrl[k].alpha = s.ctrlAlpha;
     }

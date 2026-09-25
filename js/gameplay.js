@@ -58,7 +58,7 @@ function updateLight(dt){
   if (boomLight > .04){
     const d = Math.hypot(boomX - P.x, boomY - P.y);
     const k = boomLight * Math.max(.2, 1 - d/14);
-    lightNow = Math.max(lightNow, lightBase + k*2.2);
+    lightNow = Math.max(lightNow, lightBase + k*.5);
   }
   flickerT -= dt;
   if (flickerLeft > 0){
@@ -73,6 +73,9 @@ function updateLight(dt){
     lightNow += (lightBase - lightNow) * Math.min(1, dt*8);
   }
   if (flash > .05) lightNow = Math.max(lightNow, Math.min(1.15, lightBase + flash*.7));
+  const pc = (P.y|0)*MW + (P.x|0);
+  const target = pc >= 0 && pc < LMAP.length ? LMAP[pc] : .1;
+  playerLight += (target - playerLight) * Math.min(1, dt*3);
 }
 var keys = {};
 
@@ -218,9 +221,10 @@ function nextLevel(){
   }
   showBanner((C.surge ? `ПРОРЫВ · УРОВЕНЬ ${level}` : `УРОВЕНЬ ${level}`) + ` · ${biome.name}`,
              C.surge, [grade, gunHint].filter(Boolean).join(" · "));
-  darkLevel = !brightMode && level > 2 && Math.random() < .3;
-  lightBase = brightMode ? 2.4 : (darkLevel ? .42 + Math.random()*.12 : .8 + Math.random()*.28);
+  darkLevel = !brightMode && levelLight === "dark";
+  lightBase = brightMode ? 2.4 : 1;
   lightNow = lightBase;
+  playerLight = LMAP[(P.y|0)*MW + (P.x|0)] || .1;
   flickerT = 2; flickerLeft = 0;
   stat = {fired:0, hit:0, t:0, n:enemies.length};
   combo = 0; comboT = 0;

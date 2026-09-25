@@ -193,6 +193,10 @@ function playFireAnim(){
   wpnFrame = w.seq[0].f; wpnT = w.seq[0].t;
 }
 
+var gunCv = document.createElement("canvas");
+gunCv.width = SW; gunCv.height = SH;
+var gunCtx = gunCv.getContext("2d");
+
 function drawGun(){
   const w = WPN[gun];
   const sh = H*w.scale, sw = sh*SW/SH;
@@ -202,7 +206,19 @@ function drawGun(){
   const x = W/2 - sw/2 + bx;
   const y = H - sh*.94 + by + wpnOffset*sh*1.25 + recoil*sh*.05;
 
-  ctx.drawImage(w.frames[wpnFrame] || w.frames[0], x, y, sw, sh);
+  const fr = w.frames[wpnFrame] || w.frames[0];
+  const gl = brightMode ? 1 : Math.min(1, .38 + playerLight * .85 * (lightNow / lightBase) + flash * .6);
+  if (gl < .99){
+    gunCtx.clearRect(0, 0, SW, SH);
+    gunCtx.drawImage(fr, 0, 0);
+    gunCtx.globalCompositeOperation = "source-atop";
+    gunCtx.fillStyle = FOG_BLACK[((1 - gl) * 255 + .5) | 0];
+    gunCtx.fillRect(0, 0, SW, SH);
+    gunCtx.globalCompositeOperation = "source-over";
+    ctx.drawImage(gunCv, x, y, sw, sh);
+  } else {
+    ctx.drawImage(fr, x, y, sw, sh);
+  }
 
   if (flash > .05){
     ctx.drawImage(w.flash, x, y, sw, sh);
@@ -240,25 +256,35 @@ var GRAIN = (() => {
   return c;
 })();
 
+var xhCv = document.getElementById("xhair");
+var xh = xhCv.getContext("2d");
+var xhKey = "";
 function drawCrosshair(){
-  const u = Math.max(1, Math.round(W/220));
-  const ax = Math.round(W/2 - u/2), ay = Math.round(H/2 - u/2);
-  const arm = u*5;
-  const spreadPx = Math.round(Math.tan(GUNS[gun].spread || 0)/.66 * W/2);
-  const gap = Math.max(u*3, spreadPx);
-
+  const cssW = cv.clientWidth || 400;
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
+  const key = gun + "|" + cssW + "|" + dpr;
+  if (key === xhKey) return;
+  xhKey = key;
+  const S = 160;
+  xhCv.width = S * dpr; xhCv.height = S * dpr;
+  xh.setTransform(dpr, 0, 0, dpr, 0, 0);
+  xh.clearRect(0, 0, S, S);
+  const u = 2, arm = 10;
+  const spreadPx = Math.tan(GUNS[gun].spread || 0) / .66 * cssW / 2;
+  const gap = Math.min(S/2 - arm - 4, Math.max(6, spreadPx));
+  const ax = S/2 - u/2, ay = S/2 - u/2;
   const mark = (x, y, w, h) => {
-    ctx.fillStyle = "rgba(0,0,0,.5)";
-    ctx.fillRect(x-1, y-1, w+2, h+2);
-    ctx.fillStyle = "rgba(240,232,208,.9)";
-    ctx.fillRect(x, y, w, h);
+    xh.fillStyle = "rgba(0,0,0,.5)";
+    xh.fillRect(x-1, y-1, w+2, h+2);
+    xh.fillStyle = "rgba(240,232,208,.9)";
+    xh.fillRect(x, y, w, h);
   };
   mark(ax - gap - arm, ay, arm, u);
   mark(ax + u + gap,   ay, arm, u);
   mark(ax, ay - gap - arm, u, arm);
   mark(ax, ay + u + gap,   u, arm);
-  ctx.fillStyle = "rgba(240,232,208,.55)";
-  ctx.fillRect(ax, ay, u, u);
+  xh.fillStyle = "rgba(240,232,208,.55)";
+  xh.fillRect(ax, ay, u, u);
 }
 
 function drawLastMarkers(horizon){
@@ -315,7 +341,7 @@ function rebuildMapCache(s){
   mapCache.width = w; mapCache.height = h;
   const m = mapCache.getContext("2d");
   m.clearRect(0, 0, w, h);
-  m.globalAlpha = .62;
+  m.globalAlpha = 1;
   m.fillStyle = "#0c0709";
   m.fillRect(0, 0, w, h);
   for (let y = 0; y < MH; y++){
@@ -329,46 +355,54 @@ function rebuildMapCache(s){
   m.globalAlpha = 1;
 }
 
+var mmCv = document.getElementById("minimap");
+var mm = mmCv.getContext("2d");
+var MM_S = 3;
+mmCv.width = MW*MM_S + 4; mmCv.height = MH*MM_S + 4;
+
 function drawMinimap(){
-  const s = Math.max(2, Math.round(W/190));
-  const ox = 6, oy = 6;
+  const s = MM_S, ox = 2, oy = 2;
   if (--mapSigT <= 0){ mapSig = gridSignature(); mapSigT = 30; }
   const key = gridVersion + "|" + mapSig + "|" + s;
   if (key !== mapCacheKey){ rebuildMapCache(s); mapCacheKey = key; }
-  ctx.globalAlpha = 1;
-  ctx.drawImage(mapCache, ox - 2, oy - 2);
+  mm.clearRect(0, 0, mmCv.width, mmCv.height);
+  mm.drawImage(mapCache, 0, 0);
 
-  ctx.globalAlpha = .62;
-  ctx.fillStyle = "#a3120b";
+  mm.fillStyle = "#c8160e";
   for (const e of enemies){
     if (!e.alive) continue;
-    ctx.fillRect(ox + e.x*s - s/2, oy + e.y*s - s/2, s, s);
+    mm.fillRect(ox + e.x*s - s/2, oy + e.y*s - s/2, s, s);
+  }
+  for (const b of shots){
+    const sp = Math.hypot(b.vx, b.vy) || 1;
+    const tx = ox + (b.x - b.vx/sp*.5)*s, ty = oy + (b.y - b.vy/sp*.5)*s;
+    mm.fillStyle = "rgba(255,120,40,.45)";
+    mm.fillRect(tx - 1, ty - 1, 2, 2);
+    mm.fillStyle = "#ffb040";
+    mm.fillRect(ox + b.x*s - 1.5, oy + b.y*s - 1.5, 3, 3);
   }
   for (const it of items){
     const ix = ox + it.x*s, iy = oy + it.y*s;
     const special = BUFFS[it.kind] || GUN_OF[it.kind] !== undefined;
-    ctx.fillStyle = BUFFS[it.kind] ? BUFFS[it.kind].color : (MAP_COLOR[it.kind] || "#7ba428");
+    mm.fillStyle = BUFFS[it.kind] ? BUFFS[it.kind].color : (MAP_COLOR[it.kind] || "#7ba428");
     if (special){
       const r = s * (1.5 + .5*Math.sin(clock*6));
-      ctx.globalAlpha = 1;
-      ctx.save();
-      ctx.translate(ix, iy); ctx.rotate(Math.PI/4);
-      ctx.fillRect(-r/2, -r/2, r, r);
-      ctx.restore();
-      ctx.globalAlpha = .62;
+      mm.save();
+      mm.translate(ix, iy); mm.rotate(Math.PI/4);
+      mm.fillRect(-r/2, -r/2, r, r);
+      mm.restore();
     } else {
-      ctx.fillRect(ix - s/2, iy - s/2, s*.8, s*.8);
+      mm.fillRect(ix - s/2, iy - s/2, s*.8, s*.8);
     }
   }
   const px = ox + P.x*s, py = oy + P.y*s, a = P.a;
-  ctx.fillStyle = "#e8dcc0";
-  ctx.beginPath();
-  ctx.moveTo(px + Math.cos(a)*s*2.6, py + Math.sin(a)*s*2.6);
-  ctx.lineTo(px + Math.cos(a + 2.55)*s*1.5, py + Math.sin(a + 2.55)*s*1.5);
-  ctx.lineTo(px + Math.cos(a + Math.PI)*s*.6, py + Math.sin(a + Math.PI)*s*.6);
-  ctx.lineTo(px + Math.cos(a - 2.55)*s*1.5, py + Math.sin(a - 2.55)*s*1.5);
-  ctx.closePath();
-  ctx.fill();
-  ctx.globalAlpha = 1;
+  mm.fillStyle = "#e8dcc0";
+  mm.beginPath();
+  mm.moveTo(px + Math.cos(a)*s*2.6, py + Math.sin(a)*s*2.6);
+  mm.lineTo(px + Math.cos(a + 2.55)*s*1.5, py + Math.sin(a + 2.55)*s*1.5);
+  mm.lineTo(px + Math.cos(a + Math.PI)*s*.6, py + Math.sin(a + Math.PI)*s*.6);
+  mm.lineTo(px + Math.cos(a - 2.55)*s*1.5, py + Math.sin(a - 2.55)*s*1.5);
+  mm.closePath();
+  mm.fill();
 }
 

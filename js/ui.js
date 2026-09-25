@@ -13,8 +13,8 @@ function fpsTick(rawMs){
 }
 
 var layoutEdit = false;
-var CTRL_IDS = ["stick", "fire", "swap", "pausebtn"];
-var CTRL_ORIGIN = { stick:"left bottom", fire:"right bottom", swap:"right bottom", pausebtn:"right top" };
+var CTRL_IDS = ["stick", "fire", "swap", "pausebtn", "minimap"];
+var CTRL_ORIGIN = { stick:"left bottom", fire:"right bottom", swap:"right bottom", pausebtn:"right top", minimap:"left top" };
 
 function applyControls(){
   for (const id of CTRL_IDS){
@@ -62,7 +62,7 @@ function syncSettingsUI(){
   }
   syncCtrlUI();
   document.getElementById("setnote").textContent =
-    HAS_TOUCH ? "" : "Расположение кнопок настраивается на сенсорных устройствах";
+    HAS_TOUCH ? "" : "На компьютере двигаются карта и кнопка паузы";
 }
 
 function openSettings(from){
@@ -76,7 +76,6 @@ function closeSettings(){
 }
 
 function startLayoutEdit(){
-  if (!HAS_TOUCH) return;
   layoutEdit = true;
   fireHeld = false; stickId = null; lookId = null; touch.fw = touch.st = 0; knob.style.transform = "";
   document.getElementById("settings").classList.add("gone");
@@ -422,7 +421,9 @@ function dbgRoom(){
   enemies.length = 0; items.length = 0;
   grenades.length = 0; booms.length = 0;
   enemiesLeft = 0;
-  lightBase = 1.5; lightNow = 1.5;
+  for (let i = 0; i < MW*MH; i++) LMAP[i] = GRID[i] ? 0 : .75;
+  levelLight = "lit"; playerLight = .75;
+  lightBase = 1; lightNow = 1;
   flickerT = 999; flickerLeft = 0; darkLevel = false;
   updateHUD(); dbgInfo();
 }
