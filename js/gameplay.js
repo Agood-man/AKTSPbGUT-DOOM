@@ -133,7 +133,23 @@ function updateLight(dt){
 }
 var keys = {};
 
-var bossRef = null, introT = 0, shake = 0;
+var bossRef = null, introT = 0, shake = 0, portal = null, portalT = 0;
+
+function openPortal(e){
+  let best = null;
+  for (let t = 0; t < 600 && !best; t++){
+    const x = 1.5 + Math.random()*(MW - 3), y = 1.5 + Math.random()*(MH - 3);
+    if (solid(x, y, .5)) continue;
+    if (Math.hypot(x - P.x, y - P.y) < 3) continue;
+    let clear = true;
+    for (const it of items) if (!it.dead && Math.hypot(it.x - x, it.y - y) < 1.6){ clear = false; break; }
+    if (clear) best = {x, y};
+  }
+  if (!best) best = {x:e.x, y:e.y};
+  portal = {x:best.x, y:best.y, t:0};
+  showBanner("ПОРТАЛ ОТКРЫТ", true, "собери награду и войди в портал");
+  beep("sine", 180, 1.2, .18, 720);
+}
 
 function spawnBoss(){
   const T = bossTypeFor(level);
@@ -141,7 +157,7 @@ function spawnBoss(){
   enemies = [];
   items = [];
   bossRef = {
-    type:"boss", boss:true, kind:T.id, name:T.name, tint:T.tint, scale:T.scale, rad:.55,
+    type:"boss", boss:true, kind:T.id, name:T.name, tint:T.tint, scale:T.scale, rad:.55, art:"boss_" + T.id,
     x:17.5, y:9.5, hp, maxHp:hp, alive:true, t:0, cd:2, atk:3.5, deadT:0,
     speed:T.speed * (1 + .2 * t150()), dmg:T.dmg, strafe:1,
     stuck:0, slideT:0, slideDir:1, seen:true, hurtT:0, voiceT:99, breathT:0, seeT:0, sees:false
@@ -164,13 +180,14 @@ function bossDefeated(e){
       items.push({kind, x, y, t:Math.random()*6});
     }
   };
-  drop("bullets", 3); drop("shells", 2); drop("medkit", 2); drop("armor", 1);
-  if (unlocked[3]) drop("grenades", 1);
+  drop("bullets", 6); drop("shells", 4); drop("grenades", 2);
+  drop("medkit", 2); drop("armor", 1);
   const bk = Object.keys(BUFFS);
   drop(bk[(Math.random()*bk.length)|0], 1);
   drop(bk[(Math.random()*bk.length)|0], 1);
   for (const m of enemies) if (m.alive && m.minion){ m.alive = false; m.deadT = 0; }
   showBanner(`${e.name} ПОВЕРЖЕН${e.name.endsWith("А") ? "А" : ""}`, true, "забери награду");
+
   beep("sawtooth", 90, 1.4, .3, 30);
   noiseBurst(1.2, .3, 500, .8);
   shake = Math.max(shake, 1);
@@ -179,7 +196,7 @@ function bossDefeated(e){
 function playBossIntro(name){
   const el = document.getElementById("bossintro");
   const img = document.getElementById("bossimg");
-  if (!img.src) img.src = EMBED_BOSS;
+  if (!img.getAttribute("src")) img.src = "assets/ui/boss-intro.jpg";
   document.getElementById("bossiname").textContent = name;
   el.classList.remove("gone", "play");
   void el.offsetWidth;
@@ -190,7 +207,19 @@ function playBossIntro(name){
   beep("sawtooth", 55, 1.6, .32, 30);
   noiseBurst(1.4, .22, 380, .8);
   setTimeout(() => beep("square", 880, .5, .12, 220), 350);
-  setTimeout(() => { el.classList.add("gone"); el.classList.remove("play"); if (playing) setDrone(.05); }, 2600);
+  clearTimeout(introTimer);
+  introTimer = setTimeout(stopBossIntro, 2600);
+}
+
+var introTimer = 0;
+function stopBossIntro(){
+  clearTimeout(introTimer);
+  const el = document.getElementById("bossintro");
+  if (!el.classList.contains("gone")){
+    el.classList.add("gone"); el.classList.remove("play");
+    if (playing) setDrone(.05);
+  }
+  introT = 0;
 }
 
 function freeCell(minDist){
@@ -302,7 +331,12 @@ function nextLevel(){
   for (let n=1; n<GUNS.length; n++){
     if (level < GUN_AT[n] || unlocked[n]) continue;
     const g = freeCell(4);
-    items.push({kind:"gun" + n, x:g.x, y:g.y, t:0});
+    const gx = (g.x | 0), gy = (g.y | 0);
+    items.push({kind:"gun" + n, x:gx + .5, y:gy + .5, t:0});
+    const near = LAMPS.findIndex(L => L.x === gx && L.y === gy);
+    if (near >= 0) LAMPS.splice(near, 1);
+    addLamp(gx, gy, 4.5, .85, "on", 0);
+    composeLight();
     gunHint = `НА ЭТАЖЕ: ${GUNS[n].name}`;
     break;
   }
@@ -328,7 +362,8 @@ function nextLevel(){
       items.push({kind, x:p.x, y:p.y, t:Math.random()*6});
     }
   }
-  bossRef = null;
+  stopBossIntro();
+  bossRef = null; portal = null; portalT = 1.6;
   if (isBossLevel()) spawnBoss();
   beep("sine", 300, .5, .12, 600);
   if (C.surge){

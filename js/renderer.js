@@ -665,7 +665,21 @@ function update(dt){
 
   if (aliveLeft !== enemiesLeft){ enemiesLeft = aliveLeft; updateHUD(); }
 
-  if (aliveLeft === 0 && playing && !sandbox) nextLevel();
+  if (portal){
+    portal.t += dt;
+    if (portal.t > .9 && Math.hypot(P.x - portal.x, P.y - portal.y) < .75){
+      portal = null;
+      beep("sine", 900, .5, .2, 120);
+      noiseBurst(.6, .2, 1800, .8);
+      nextLevel();
+      return;
+    }
+  }
+  if (isBossLevel() && aliveLeft === 0 && !portal && playing && !sandbox){
+    portalT -= dt;
+    if (portalT <= 0) openPortal(bossRef || P);
+  }
+  if (aliveLeft === 0 && playing && !sandbox && !isBossLevel()) nextLevel();
 }
 
 var SPR = [], sprN = 0, drawn = [];
@@ -694,7 +708,38 @@ function texLevel(hit, side, lvl){
   return c;
 }
 
-var LIGHT_COLORS = [[255,120,40], [210,55,30], [230,196,40], [70,165,215], [255,150,60], [255,214,150]];
+var LIGHT_COLORS = [[255,120,40], [210,55,30], [230,196,40], [70,165,215], [255,150,60], [255,214,150], [170,90,255]];
+var PORTAL_FRAMES = (() => {
+  const frames = [];
+  for (let f = 0; f < 16; f++){
+    const c = document.createElement("canvas"); c.width = c.height = 64;
+    const g = c.getContext("2d");
+    const rot = f / 16 * Math.PI * 2;
+    g.save(); g.translate(32, 32); g.scale(.62, 1);
+    const core = g.createRadialGradient(0, 0, 0, 0, 0, 30);
+    core.addColorStop(0, "rgba(255,245,255,.95)");
+    core.addColorStop(.25, "rgba(200,140,255,.9)");
+    core.addColorStop(.6, "rgba(110,40,200,.75)");
+    core.addColorStop(1, "rgba(40,0,90,0)");
+    g.fillStyle = core; g.beginPath(); g.arc(0, 0, 30, 0, Math.PI*2); g.fill();
+    for (let arm = 0; arm < 4; arm++){
+      g.strokeStyle = arm % 2 ? "rgba(120,220,255,.55)" : "rgba(235,200,255,.6)";
+      g.lineWidth = 2.2;
+      g.beginPath();
+      for (let i = 0; i <= 26; i++){
+        const t = i / 26, a = rot + arm * Math.PI/2 + t * 4.2, r = 2 + t * 26;
+        const x = Math.cos(a) * r, y = Math.sin(a) * r;
+        if (i) g.lineTo(x, y); else g.moveTo(x, y);
+      }
+      g.stroke();
+    }
+    g.strokeStyle = "rgba(220,180,255,.8)"; g.lineWidth = 2.5;
+    g.beginPath(); g.arc(0, 0, 29, 0, Math.PI*2); g.stroke();
+    g.restore();
+    frames.push(c);
+  }
+  return frames;
+})();
 function lampArt(on){
   const c = document.createElement("canvas"); c.width = c.height = 64;
   const g = c.getContext("2d");
@@ -768,6 +813,7 @@ function collectLights(){
     if (c !== undefined) addLight(it.x, it.y, 2.6, .7 * (.8 + .2*Math.sin(clock*5 + it.x)), c, .32);
   }
   for (const e of booms) addLight(e.x, e.y, 5.5, 1.5 * Math.max(0, 1 - e.t/.45), 4, .05);
+  if (portal) addLight(portal.x, portal.y, 4.5, Math.min(1, portal.t / .9) * (1 + .15*Math.sin(clock*4)), 6, 0);
 }
 
 function lightAt(x, y){
@@ -935,7 +981,7 @@ function render(){
     const dead = !e.alive;
     const sc = e.scale || k.scale;
     const o = addSprite(e.x, e.y,
-      dead ? ART.corpse[e.boss ? "imp" : e.type] : ART[k.art][(e.t*4|0) % 2],
+      dead ? ART.corpse[e.art || e.type] : ART[e.art || k.art][(e.t*4|0) % 2],
       dead ? sc * .92 : sc,
       dead ? (.24 + Math.min(.18, e.deadT*.55)) : (e.boss ? .5 - sc/2 : 0));
     if (o) o.tint = e.tint || null;
@@ -968,6 +1014,18 @@ function render(){
       if (cn){ cn.glow = 5; cn.glowA = .7 * L.val; }
       const g = addSprite(L.x + .5, L.y + .5, GLOW[5], .7, -.37);
       if (g){ g.glow = 5; g.glowA = .45 * L.val; }
+    }
+  }
+  if (portal){
+    const grow = Math.min(1, portal.t / .9);
+    const ease = 1 - Math.pow(1 - grow, 3);
+    const fr = PORTAL_FRAMES[((clock * 14) | 0) % PORTAL_FRAMES.length];
+    const sc = .95 * ease * (1 + .04*Math.sin(clock*3));
+    if (sc > .02){
+      const po = addSprite(portal.x, portal.y, fr, sc, .02);
+      if (po) po.emit = true;
+      const pg = addSprite(portal.x, portal.y, GLOW[6], 2.1 * ease, .02);
+      if (pg){ pg.glow = 6; pg.glowA = .65 * ease; }
     }
   }
   for (const b of shots){

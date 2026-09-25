@@ -330,7 +330,7 @@ function quitToMenu(){
   pauseBtn.classList.add("gone");
   playing = false;
   updateInvUI();
-  bossRef = null; introT = 0;
+  bossRef = null; portal = null; stopBossIntro();
   document.getElementById("bossbar").classList.add("gone");
   faceCv.classList.add("gone");
   screen.classList.remove("hide", "death");
@@ -558,7 +558,7 @@ function gameOver(){
   if (!cheated) clearSave();
   playing = false;
   updateInvUI();
-  bossRef = null; introT = 0;
+  bossRef = null; portal = null; stopBossIntro();
   document.getElementById("bossbar").classList.add("gone");
   screen.classList.remove("hide");
   screen.classList.add("death");

@@ -45,6 +45,32 @@ function composeLight(){
   }
 }
 
+var lampDist = new Int16Array(35 * 35), lampQ = new Int32Array(35 * 35);
+function addLamp(x, y, R, I, state, t0){
+  const c = y * MW + x;
+  if (GRID[c]) return null;
+  lampDist.fill(-1);
+  let h = 0, tl = 0;
+  lampDist[c] = 0; lampQ[tl++] = c;
+  const cells = [], w = [];
+  while (h < tl){
+    const v = lampQ[h++], d = lampDist[v];
+    const f = 1 - d / R;
+    if (f > 0){ cells.push(v); w.push(Math.pow(f, 1.6)); }
+    if (d + 1 > R) continue;
+    const vx = v % MW, vy = (v / MW) | 0;
+    if (vx > 0    && !GRID[v-1]  && lampDist[v-1]  < 0){ lampDist[v-1]  = d + 1; lampQ[tl++] = v-1; }
+    if (vx < MW-1 && !GRID[v+1]  && lampDist[v+1]  < 0){ lampDist[v+1]  = d + 1; lampQ[tl++] = v+1; }
+    if (vy > 0    && !GRID[v-MW] && lampDist[v-MW] < 0){ lampDist[v-MW] = d + 1; lampQ[tl++] = v-MW; }
+    if (vy < MH-1 && !GRID[v+MW] && lampDist[v+MW] < 0){ lampDist[v+MW] = d + 1; lampQ[tl++] = v+MW; }
+  }
+  const L = { x, y, c, R, I, state,
+    cells: Int32Array.from(cells), w: Float32Array.from(w),
+    val: state === "off" ? 0 : 1, t: t0 || 0, blink: 0 };
+  LAMPS.push(L);
+  return L;
+}
+
 function buildLightMap(dep){
   const r = RNG();
   const kind = dep <= 2 ? "normal" : r < .24 ? "dark" : r < .8 ? "normal" : "lit";
@@ -61,7 +87,6 @@ function buildLightMap(dep){
   for (let i = 0; i < N; i++) if (!GRID[i]) free.push(i);
   const want = Math.max(3, Math.round(free.length / 26));
   LAMPS = [];
-  const dist = new Int16Array(N), q = new Int32Array(N);
   for (let t = 0; t < want * 30 && LAMPS.length < want; t++){
     const c = free[rnd(free.length)];
     const x = c % MW, y = (c / MW) | 0;
@@ -71,24 +96,7 @@ function buildLightMap(dep){
     const R = 3.5 + RNG()*2, I = .5 + RNG()*.3;
     const roll = RNG();
     const state = roll < pOn ? "on" : roll < pOn + pFl ? "flicker" : "off";
-    dist.fill(-1);
-    let h = 0, tl = 0;
-    dist[c] = 0; q[tl++] = c;
-    const cells = [], w = [];
-    while (h < tl){
-      const v = q[h++], d = dist[v];
-      const f = 1 - d / R;
-      if (f > 0){ cells.push(v); w.push(Math.pow(f, 1.6)); }
-      if (d + 1 > R) continue;
-      const vx = v % MW, vy = (v / MW) | 0;
-      if (vx > 0    && !GRID[v-1]  && dist[v-1]  < 0){ dist[v-1]  = d + 1; q[tl++] = v-1; }
-      if (vx < MW-1 && !GRID[v+1]  && dist[v+1]  < 0){ dist[v+1]  = d + 1; q[tl++] = v+1; }
-      if (vy > 0    && !GRID[v-MW] && dist[v-MW] < 0){ dist[v-MW] = d + 1; q[tl++] = v-MW; }
-      if (vy < MH-1 && !GRID[v+MW] && dist[v+MW] < 0){ dist[v+MW] = d + 1; q[tl++] = v+MW; }
-    }
-    LAMPS.push({ x, y, c, R, I, state,
-      cells: Int32Array.from(cells), w: Float32Array.from(w),
-      val: state === "off" ? 0 : 1, t: RNG()*4, blink: 0 });
+    addLamp(x, y, R, I, state, RNG()*4);
   }
   composeLight();
   levelLight = kind;

@@ -396,6 +396,11 @@ function drawMinimap(){
       mm.fillRect(ix - s/2, iy - s/2, s*.8, s*.8);
     }
   }
+  if (portal){
+    const r = s * (1.6 + .6*Math.sin(clock*5));
+    mm.fillStyle = "#b070ff";
+    mm.beginPath(); mm.arc(ox + portal.x*s, oy + portal.y*s, r, 0, Math.PI*2); mm.fill();
+  }
   const px = ox + P.x*s, py = oy + P.y*s, a = P.a;
   mm.fillStyle = "#e8dcc0";
   mm.beginPath();

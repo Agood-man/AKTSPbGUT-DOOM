@@ -166,16 +166,6 @@ function caster(frame){
   return s;
 }
 
-function corpse(hue){
-  const [s,g] = blank();
-  g.save();
-  g.translate(32, 39);
-  g.rotate(Math.PI / 2);
-  g.drawImage(enemyImage, -28, -28, 56, 56);
-  g.restore();
-  return s;
-}
-
 function bloodSplash(){
   const [s,g] = blank();
   g.fillStyle = "rgba(150,18,12,.85)";
@@ -217,64 +207,58 @@ function fireballSprite(){
   return s;
 }
 
-var enemyImage = new Image();
-enemyImage.src = EMBED_ENEMY;
-
-var enemySprite = () => {
-  const [s,g] = blank();
-  g.imageSmoothingEnabled = false;
-  g.drawImage(enemyImage, 0, 0, 64, 64);
-  return s;
-};
-
-var ENEMY_SPRITE = enemySprite();
-enemyImage.onload = () => {
-  const g = ENEMY_SPRITE.getContext("2d");
-  g.clearRect(0, 0, 64, 64);
-  g.imageSmoothingEnabled = false;
-  g.drawImage(enemyImage, 0, 0, 64, 64);
-  for (const type of ["imp","bull","caster"]){
-    const cg = ART.corpse[type].getContext("2d");
-    cg.clearRect(0,0,64,64);
-    cg.imageSmoothingEnabled = false;
-    cg.save();
-    cg.translate(32,42);
-    cg.rotate(Math.PI/2);
-    cg.drawImage(enemyImage,-28,-28,56,56);
-    cg.restore();
-  }
-};
-
 function drawFallbackEnemy(g){
   g.clearRect(0, 0, 64, 64);
   g.fillStyle = "#2e211c"; g.fillRect(10, 30, 44, 34);
   g.fillStyle = "#5e4234"; g.fillRect(16, 6, 32, 30);
   g.fillStyle = "#402c23"; g.fillRect(16, 6, 32, 6);
   g.fillStyle = "#c8160e"; g.fillRect(22, 18, 7, 5); g.fillRect(35, 18, 7, 5);
-  g.fillStyle = "#ffd0c0"; g.fillRect(24, 19, 2, 2); g.fillRect(37, 19, 2, 2);
   g.fillStyle = "#140a08"; g.fillRect(24, 28, 16, 4);
-  g.fillStyle = "#e8dcc0"; g.fillRect(26, 28, 3, 2); g.fillRect(35, 28, 3, 2);
 }
 
-var enemyRetry = false;
-enemyImage.onerror = () => {
-  if (!enemyRetry){
-    enemyRetry = true;
-    enemyImage.src = EMBED_ENEMY;
-    return;
-  }
-  drawFallbackEnemy(ENEMY_SPRITE.getContext("2d"));
-  for (const type of ["imp","bull","caster"]){
-    const cg = ART.corpse[type].getContext("2d");
-    cg.clearRect(0,0,64,64);
-    cg.imageSmoothingEnabled = false;
-    cg.save();
-    cg.translate(32,42);
-    cg.rotate(Math.PI/2);
-    cg.drawImage(ENEMY_SPRITE,-28,-28,56,56);
-    cg.restore();
-  }
+var ENEMY_IMG = "assets/enemies/enemy.jpg";
+var CHAR_FILES = {
+  imp:ENEMY_IMG, bull:ENEMY_IMG, caster:ENEMY_IMG,
+  boss_tank:ENEMY_IMG, boss_summoner:ENEMY_IMG, boss_caster:ENEMY_IMG, boss_berserk:ENEMY_IMG
 };
+var CHAR = {};
+
+function paintChar(key, src){
+  const c = CHAR[key];
+  const g = c.sprite.getContext("2d");
+  g.clearRect(0, 0, 64, 64);
+  g.imageSmoothingEnabled = false;
+  g.drawImage(src, 0, 0, 64, 64);
+  const cg = c.corpse.getContext("2d");
+  cg.clearRect(0, 0, 64, 64);
+  cg.imageSmoothingEnabled = false;
+  cg.save(); cg.translate(32, 42); cg.rotate(Math.PI/2);
+  cg.drawImage(src, -28, -28, 56, 56);
+  cg.restore();
+}
+
+for (const key in CHAR_FILES){
+  const sprite = document.createElement("canvas"); sprite.width = sprite.height = 64;
+  const corpseCv = document.createElement("canvas"); corpseCv.width = corpseCv.height = 64;
+  CHAR[key] = { sprite, corpse:corpseCv, fallback:false };
+}
+
+(() => {
+  const byPath = {};
+  for (const key in CHAR_FILES) (byPath[CHAR_FILES[key]] = byPath[CHAR_FILES[key]] || []).push(key);
+  for (const path in byPath){
+    const keys = byPath[path], img = new Image();
+    let tries = 0;
+    img.onload = () => { for (const k of keys){ paintChar(k, img); CHAR[k].fallback = false; } };
+    img.onerror = () => {
+      if (tries++ < 2){ setTimeout(() => { img.src = path + "?r=" + Date.now(); }, 900 * tries); return; }
+      const t = document.createElement("canvas"); t.width = t.height = 64;
+      drawFallbackEnemy(t.getContext("2d"));
+      for (const k of keys){ paintChar(k, t); CHAR[k].fallback = true; }
+    };
+    img.src = path;
+  }
+})();
 
 function gunItem(color, label){
   const [s,g] = blank();
@@ -307,10 +291,16 @@ function boomSprite(){
 }
 
 var ART = {
-  imp:[ENEMY_SPRITE, ENEMY_SPRITE],
-  bull:[ENEMY_SPRITE, ENEMY_SPRITE],
-  caster:[ENEMY_SPRITE, ENEMY_SPRITE],
-  corpse:{imp:corpse(0), bull:corpse(0), caster:corpse(0)},
+  imp:[CHAR.imp.sprite, CHAR.imp.sprite],
+  bull:[CHAR.bull.sprite, CHAR.bull.sprite],
+  caster:[CHAR.caster.sprite, CHAR.caster.sprite],
+  boss_tank:[CHAR.boss_tank.sprite, CHAR.boss_tank.sprite],
+  boss_summoner:[CHAR.boss_summoner.sprite, CHAR.boss_summoner.sprite],
+  boss_caster:[CHAR.boss_caster.sprite, CHAR.boss_caster.sprite],
+  boss_berserk:[CHAR.boss_berserk.sprite, CHAR.boss_berserk.sprite],
+  corpse:{imp:CHAR.imp.corpse, bull:CHAR.bull.corpse, caster:CHAR.caster.corpse,
+          boss_tank:CHAR.boss_tank.corpse, boss_summoner:CHAR.boss_summoner.corpse,
+          boss_caster:CHAR.boss_caster.corpse, boss_berserk:CHAR.boss_berserk.corpse},
   bloodSplash:bloodSplash(),
   medkit:medkit(),
   armor:armorItem(),
