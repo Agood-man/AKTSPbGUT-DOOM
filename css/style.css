@@ -106,7 +106,7 @@
     background:rgba(18,12,10,.9);
   }
   #pause h2{margin-top:auto}
-  #quit{margin-bottom:auto}
+  #settingsbtn2{margin-bottom:auto}
   #pause h2{font-size:clamp(30px,9vw,54px);letter-spacing:6px;color:var(--bone);
     text-shadow:0 3px 0 #000;margin-bottom:0}
   #pause p{font-size:13px;opacity:.75;margin:0}
@@ -127,6 +127,9 @@
   #settings .srow span{opacity:.8}
   #settings .srow b{font-size:12px;color:var(--slime);font-weight:normal}
   #settings input[type=range]{width:100%;accent-color:#c9a227}
+  #settings .ctabs{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:6px}
+  #settings .ctabs button{padding:8px 10px;font-size:10px}
+  #settings .ctabs button.on{background:var(--bone);color:#1a120e}
   #settings .sbtns{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:6px}
   #settings button{
     padding:10px 14px;font:inherit;font-size:11px;letter-spacing:2px;cursor:pointer;
@@ -144,8 +147,10 @@
     background:rgba(18,12,10,.85);color:var(--bone);border:2px solid rgba(232,220,192,.45);
   }
   body.editing #stick, body.editing #fire, body.editing #swap, body.editing #pausebtn{
-    display:flex!important;outline:2px dashed var(--slime);outline-offset:4px;z-index:9;cursor:move;
+    outline:2px dashed var(--slime);outline-offset:4px;z-index:9;cursor:move;
   }
+  body.editing #fire, body.editing #swap{display:flex!important}
+  body.editing #stick, body.editing #pausebtn{display:block!important}
   body.editing #hud, body.editing #face{opacity:.35}
   #wrap{position:relative;width:100%;height:100%;overflow:hidden}
   canvas{display:block;width:100%;height:100%;
