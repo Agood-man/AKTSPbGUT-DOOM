@@ -164,9 +164,9 @@ function updateFace(dt){
   let mood = "calm";
   if (!playing && hp <= 0) mood = "dead";
   else if (P.hitT > 0) mood = "hurt";
-  else if (buff === "rage") mood = "rage";
-  else if (buff === "haste") mood = "haste";
-  else if (buff === "shield") mood = "shield";
+  else if (BT.rage > 0) mood = "rage";
+  else if (BT.haste > 0) mood = "haste";
+  else if (BT.shield > 0) mood = "shield";
   else if (comboT > 0 && combo >= 3) mood = "gloat";
 
   const dmg = hp > 88 ? 0 : hp > 72 ? 1 : hp > 55 ? 2 : hp > 36 ? 3 : hp > 18 ? 4 : 5;

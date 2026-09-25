@@ -49,10 +49,11 @@ function buildLightMap(dep){
   const r = RNG();
   const kind = dep <= 2 ? "normal" : r < .24 ? "dark" : r < .8 ? "normal" : "lit";
   let pOn, pFl;
-  if (kind === "dark"){ levelL = .6 + RNG()*.08; pOn = .2; pFl = .28; }
-  else if (kind === "lit"){ levelL = .74 + RNG()*.08; pOn = .7; pFl = .17; }
-  else { levelL = .68 + RNG()*.08; pOn = .48; pFl = .24; }
-  const amb = .5;
+  if (kind === "dark"){ levelL = .62 + RNG()*.08; pOn = .2; pFl = .28; }
+  else if (kind === "lit"){ levelL = .82 + RNG()*.08; pOn = .7; pFl = .17; }
+  else { levelL = .74 + RNG()*.1; pOn = .48; pFl = .24; }
+  if (biome.id === "boss"){ levelL = .8; pOn = .7; pFl = .3; }
+  const amb = .55;
   const N = MW * MH;
   for (let i = 0; i < N; i++) LMAPB[i] = GRID[i] ? 0 : amb;
 
@@ -67,7 +68,7 @@ function buildLightMap(dep){
     let near = false;
     for (const L of LAMPS) if (Math.abs(L.x - x) + Math.abs(L.y - y) < 5){ near = true; break; }
     if (near) continue;
-    const R = 3.5 + RNG()*2, I = .45 + RNG()*.3;
+    const R = 3.5 + RNG()*2, I = .5 + RNG()*.3;
     const roll = RNG();
     const state = roll < pOn ? "on" : roll < pOn + pFl ? "flicker" : "off";
     dist.fill(-1);
@@ -93,11 +94,21 @@ function buildLightMap(dep){
   levelLight = kind;
 }
 
+function genBossArena(){
+  carveRect(6, 6, MW - 7, MH - 7);
+  for (const [x, y] of [[11,11],[22,11],[11,22],[22,22]]){
+    setCell(x, y, 1); setCell(x+1, y, 1); setCell(x, y+1, 1); setCell(x+1, y+1, 1);
+  }
+  return {x: 17.5, y: 26.5};
+}
+GENERATORS.boss = genBossArena;
+
 function generateLevel(depth){
   GRID.fill(1);
   rooms = [];
   RNG = mulberry32((runSeed ^ Math.imul(depth + 1, 0x9E3779B1)) >>> 0);
   biome = depth <= 3 ? {id:"small", name:"АУДИТОРИЯ"} : BIOMES[rnd(BIOMES.length)];
+  if (depth % 20 === 0) biome = {id:"boss", name:"ЛОГОВО"};
 
   let spawn = GENERATORS[biome.id]();
   connectAll(spawn);

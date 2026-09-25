@@ -5,7 +5,8 @@ function saveGame(){
     v:1, level, kills, gun, seed:runSeed, seedName, cheated,
     hp:Math.round(P.hp), armor:Math.round(P.armor),
     bullets:ammo.bullets, shells:ammo.shells, grenades:ammo.grenades,
-    guns:unlocked.reduce((m, v, i) => m | (v ? 1 << i : 0), 0)
+    guns:unlocked.reduce((m, v, i) => m | (v ? 1 << i : 0), 0),
+    inv:[inv.rage, inv.haste, inv.shield]
   }));
 }
 function loadGame(){
@@ -39,7 +40,34 @@ var BUFFS = {
   haste: {name:"УСКОРЕНИЕ", time:15, color:"#e0c020"},
   shield:{name:"ЩИТ",       time:10, color:"#3f9fd0"}
 };
-var buff = null, buffT = 0, buffShown = -1;
+var BT = {rage:0, haste:0, shield:0};
+var inv = {rage:0, haste:0, shield:0};
+var INV_MAX = 3, BUFF_CAP = 45;
+var buffShownKey = "";
+
+function updateInvUI(){
+  const bar = document.getElementById("invbar");
+  let any = false;
+  for (const k in inv){
+    const el = document.getElementById("inv_" + k);
+    el.querySelector("b").textContent = inv[k];
+    el.classList.toggle("empty", inv[k] <= 0);
+    el.classList.toggle("active", BT[k] > 0);
+    if (inv[k] > 0 || BT[k] > 0) any = true;
+  }
+  bar.classList.toggle("gone", !any || !playing);
+}
+
+function useBuff(k){
+  if (!playing || paused || layoutEdit || inv[k] <= 0) return;
+  inv[k]--;
+  BT[k] = Math.min(BUFF_CAP, BT[k] + BUFFS[k].time);
+  buffShownKey = "";
+  showBanner(BUFFS[k].name, true);
+  beep("sine", 400, .4, .16, 1100);
+  updateInvUI();
+  saveGame();
+}
 var stat = {fired:0, hit:0, t:0, n:0};
 var clock = 0;
 var INV_TIME = .45;
@@ -104,6 +132,66 @@ function updateLight(dt){
   playerLight += (target - playerLight) * Math.min(1, dt*3);
 }
 var keys = {};
+
+var bossRef = null, introT = 0, shake = 0;
+
+function spawnBoss(){
+  const T = bossTypeFor(level);
+  const hp = Math.round(T.hp * (1 + 1.8 * t150()));
+  enemies = [];
+  items = [];
+  bossRef = {
+    type:"boss", boss:true, kind:T.id, name:T.name, tint:T.tint, scale:T.scale, rad:.55,
+    x:17.5, y:9.5, hp, maxHp:hp, alive:true, t:0, cd:2, atk:3.5, deadT:0,
+    speed:T.speed * (1 + .2 * t150()), dmg:T.dmg, strafe:1,
+    stuck:0, slideT:0, slideDir:1, seen:true, hurtT:0, voiceT:99, breathT:0, seeT:0, sees:false
+  };
+  enemies.push(bossRef);
+  enemiesLeft = 1;
+  const drops = [["bullets", 8.5, 24.5], ["bullets", 26.5, 24.5], ["shells", 8.5, 8.5], ["medkit", 26.5, 8.5]];
+  if (unlocked[3]) drops.push(["grenades", 17.5, 17.5]);
+  for (const [kind, x, y] of drops) items.push({kind, x, y, t:Math.random()*6});
+  P.x = 17.5; P.y = 26.5; P.a = -Math.PI / 2;
+  stat = {fired:0, hit:0, t:0, n:1};
+}
+
+function bossDefeated(e){
+  const drop = (kind, n) => {
+    for (let i = 0; i < n; i++){
+      const a = Math.random() * 6.283, r = .6 + Math.random() * 1.6;
+      let x = e.x + Math.cos(a)*r, y = e.y + Math.sin(a)*r;
+      if (solid(x, y, .3)){ x = e.x; y = e.y; }
+      items.push({kind, x, y, t:Math.random()*6});
+    }
+  };
+  drop("bullets", 3); drop("shells", 2); drop("medkit", 2); drop("armor", 1);
+  if (unlocked[3]) drop("grenades", 1);
+  const bk = Object.keys(BUFFS);
+  drop(bk[(Math.random()*bk.length)|0], 1);
+  drop(bk[(Math.random()*bk.length)|0], 1);
+  for (const m of enemies) if (m.alive && m.minion){ m.alive = false; m.deadT = 0; }
+  showBanner(`${e.name} ПОВЕРЖЕН${e.name.endsWith("А") ? "А" : ""}`, true, "забери награду");
+  beep("sawtooth", 90, 1.4, .3, 30);
+  noiseBurst(1.2, .3, 500, .8);
+  shake = Math.max(shake, 1);
+}
+
+function playBossIntro(name){
+  const el = document.getElementById("bossintro");
+  const img = document.getElementById("bossimg");
+  if (!img.src) img.src = EMBED_BOSS;
+  document.getElementById("bossiname").textContent = name;
+  el.classList.remove("gone", "play");
+  void el.offsetWidth;
+  el.classList.add("play");
+  introT = 2.6;
+  fireHeld = false; mouseHeld = false;
+  setDrone(0);
+  beep("sawtooth", 55, 1.6, .32, 30);
+  noiseBurst(1.4, .22, 380, .8);
+  setTimeout(() => beep("square", 880, .5, .12, 220), 350);
+  setTimeout(() => { el.classList.add("gone"); el.classList.remove("play"); if (playing) setDrone(.05); }, 2600);
+}
 
 function freeCell(minDist){
   for (let i=0;i<800;i++){
@@ -240,13 +328,20 @@ function nextLevel(){
       items.push({kind, x:p.x, y:p.y, t:Math.random()*6});
     }
   }
+  bossRef = null;
+  if (isBossLevel()) spawnBoss();
   beep("sine", 300, .5, .12, 600);
   if (C.surge){
     setDrone(0);
     setTimeout(() => { beep("sine", 44, 1.6, .3, 24); noiseBurst(1.2, .18, 260, .8); setDrone(.05); }, 900);
   }
-  showBanner((C.surge ? `ПРОРЫВ · УРОВЕНЬ ${level}` : `УРОВЕНЬ ${level}`) + ` · ${biome.name}`,
-             C.surge, [grade, gunHint].filter(Boolean).join(" · "));
+  if (bossRef){
+    showBanner(`БОЙ С БОССОМ · ${bossRef.name}`, true, `УРОВЕНЬ ${level}`);
+    playBossIntro(bossRef.name);
+  } else {
+    showBanner((C.surge ? `ПРОРЫВ · УРОВЕНЬ ${level}` : `УРОВЕНЬ ${level}`) + ` · ${biome.name}`,
+               C.surge, [grade, gunHint].filter(Boolean).join(" · "));
+  }
   darkLevel = !brightMode && levelLight === "dark";
   lightBase = brightMode ? 2.4 : 1;
   lightNow = lightBase;
@@ -258,6 +353,7 @@ function nextLevel(){
   grenades.length = 0; booms.length = 0;
   wpnSeq = null; wpnFrame = 0; wpnOffset = 0; wpnSwitch = -1;
   updateHUD();
+  updateInvUI();
   saveGame();
 }
 
@@ -267,7 +363,8 @@ function reset(seed){
   ammo = {bullets:45, shells:10, grenades:0};
   unlocked = [true, false, false, false];
   gun = 0; kills = 0; level = 0;
-  buff = null; buffT = 0; buffShown = -1;
+  for (const k in BT){ BT[k] = 0; inv[k] = 0; }
+  buffShownKey = "";
   combo = 0; comboT = 0;
   grenades.length = 0; booms.length = 0;
   nextLevel();

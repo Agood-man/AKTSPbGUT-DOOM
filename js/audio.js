@@ -218,7 +218,7 @@ function fireballSprite(){
 }
 
 var enemyImage = new Image();
-enemyImage.src = "assets/images/enemy.jpg";
+enemyImage.src = EMBED_ENEMY;
 
 var enemySprite = () => {
   const [s,g] = blank();
@@ -260,7 +260,7 @@ var enemyRetry = false;
 enemyImage.onerror = () => {
   if (!enemyRetry){
     enemyRetry = true;
-    enemyImage.src = "assets/images/enemy.jpg?r=" + Date.now();
+    enemyImage.src = EMBED_ENEMY;
     return;
   }
   drawFallbackEnemy(ENEMY_SPRITE.getContext("2d"));
@@ -323,13 +323,26 @@ var ART = {
   grenade:grenadeSprite(), boom:boomSprite()
 };
 
-var HITR = e => .48 * KIND[e.type].scale;
+var HITR = e => .48 * (e.scale || KIND[e.type].scale);
 
 var KIND = {
   imp:    {hp:10, speed:1.70, dmg:9,  rate:.9,  melee:true,  reach:.85, art:"imp",    scale:1.0},
   bull:   {hp:35, speed:1.00, dmg:17, rate:1.2, melee:true,  reach:1.05,art:"bull",   scale:1.35},
-  caster: {hp:15, speed:.8,   dmg:0,  rate:1.6, melee:false, reach:7.0, art:"caster", scale:1.1}
+  caster: {hp:15, speed:.8,   dmg:0,  rate:1.6, melee:false, reach:7.0, art:"caster", scale:1.1},
+  boss:   {hp:0,  speed:1,    dmg:20, rate:1.2, melee:true,  reach:1.6, art:"imp",    scale:1.8}
 };
+var BOSS_EVERY = 20;
+var BOSS_TYPES = [
+  {id:"tank",     name:"ВАХТЁРША", hp:1500, speed:.8,  scale:1.95, dmg:24, tint:"rgba(130,85,40,.28)"},
+  {id:"summoner", name:"ЗАВУЧ",    hp:950,  speed:.95, scale:1.7,  dmg:14, tint:"rgba(60,170,70,.3)"},
+  {id:"caster",   name:"ХИМИЧКА",  hp:1050, speed:1.1, scale:1.7,  dmg:14, tint:"rgba(150,70,210,.32)"},
+  {id:"berserk",  name:"ФИЗРУК",   hp:1200, speed:1.2, scale:1.8,  dmg:18, tint:"rgba(210,40,30,.3)"}
+];
+var isBossLevel = () => level > 0 && level % BOSS_EVERY === 0;
+function bossTypeFor(lvl){
+  const n = lvl / BOSS_EVERY;
+  return BOSS_TYPES[(n - 1 + (runSeed % BOSS_TYPES.length)) % BOSS_TYPES.length];
+}
 var FIREBALL_DMG = 13, FIREBALL_SPEED = 4.0;
 
 var DEPTH_CAP = 150;
@@ -341,7 +354,7 @@ var ramp = (cap, pow) => cap * Math.pow(t150(), pow);
 var dmgBonus = () => level <= 10 ? level*.6 : 6 + 10*Math.pow((depth()-10)/140, .6);
 var rateMul = () => 1 - .28*Math.pow(t150(), .6);
 
-var isSurge = () => level > 0 && level % 5 === 0;
+var isSurge = () => level > 0 && level % 5 === 0 && level % 20 !== 0;
 
 function countRange(){
   if (level <= 3){ const n = Math.round((4 + Math.round(level*1.5)) * .7); return [n, n]; }

@@ -81,9 +81,91 @@ function unstick(e){
     }
   }
 }
+function bossFire(e, ux, uy, ang){
+  const c = Math.cos(ang), s = Math.sin(ang);
+  const vx = ux*c - uy*s, vy = ux*s + uy*c;
+  shots.push({x:e.x + vx*.6, y:e.y + vy*.6, vx:vx*FIREBALL_SPEED*1.1, vy:vy*FIREBALL_SPEED*1.1, t:0});
+}
+
+function bossAI(e, dt, d, ux, uy, mx, my, sees){
+  const sp = e.speed * dt;
+  e.atk -= dt;
+  const frac = e.hp / e.maxHp;
+  const a = atPos(e.x, e.y);
+  if (e.kind === "tank"){
+    if (d > 1.8) moveEnemy(e, mx*sp, my*sp);
+    else if (e.cd <= 0){ e.cd = 1.3 * rateMul(); damagePlayer(e.dmg + dmgBonus()*1.3, e.x, e.y); }
+    if (e.atk <= 0 && d < 6){
+      e.atk = 4.5;
+      booms.push({x:e.x, y:e.y, t:0});
+      boomLight = 1; boomX = e.x; boomY = e.y;
+      beep("sawtooth", 48, .6, .3*a.vol, 24, a.pan);
+      noiseBurst(.5, .3*a.vol, 260, .8, a.pan);
+      shake = Math.max(shake, .8);
+      if (d < 3.4) damagePlayer(12 + dmgBonus(), e.x, e.y);
+    }
+  } else if (e.kind === "summoner"){
+    const want = 6;
+    if (!sees || d > want + 1) moveEnemy(e, mx*sp, my*sp);
+    else if (d < want - 1) moveEnemy(e, -ux*sp, -uy*sp);
+    if (e.atk <= 0){
+      e.atk = 7;
+      const alive = enemies.filter(m => m.alive && m.minion).length;
+      const n = Math.min(5 - alive, 2 + (level >= 80 ? 1 : 0));
+      const k = KIND.imp;
+      for (let i = 0; i < n; i++){
+        const ang = Math.random() * 6.283;
+        let x = e.x + Math.cos(ang)*1.4, y = e.y + Math.sin(ang)*1.4;
+        if (solid(x, y, .34)){ x = e.x; y = e.y; }
+        enemies.push({type:"imp", minion:true, x, y, hp:k.hp + curve().hpBonus("imp"), alive:true,
+          t:Math.random()*10, cd:1, deadT:0, speed:Math.min(k.speed + level*.03, k.speed*1.28),
+          stuck:0, slideT:0, slideDir:1, seen:true, hurtT:0, voiceT:9, breathT:0, seeT:0, sees:false});
+        booms.push({x, y, t:.25});
+      }
+      if (n > 0){ beep("sine", 140, .6, .2*a.vol, 520, a.pan); noiseBurst(.4, .15*a.vol, 900, .8, a.pan); }
+    }
+    if (e.cd <= 0 && sees){ e.cd = 1.6 * rateMul(); bossFire(e, ux, uy, 0); beep("sine", 240, .2, .12, 110); }
+  } else if (e.kind === "caster"){
+    const want = 5.5;
+    let wx = -uy * e.strafe, wy = ux * e.strafe;
+    if (!sees || d > want + 1){ wx += mx*1.5; wy += my*1.5; }
+    else if (d < want - 1){ wx -= ux; wy -= uy; }
+    const l = Math.hypot(wx, wy) || 1;
+    moveEnemy(e, wx/l*sp, wy/l*sp);
+    if (Math.random() < dt*.3) e.strafe *= -1;
+    if (e.cd <= 0 && sees){
+      e.cd = 1.9 * rateMul();
+      const n = level >= 80 ? 3 : 2;
+      for (let i = -n; i <= n; i++) bossFire(e, ux, uy, i * .15);
+      beep("sine", 300, .3, .16, 90);
+    }
+    if (d < 2.6 && e.atk <= 0){
+      e.atk = 3;
+      booms.push({x:e.x, y:e.y, t:.2});
+      for (let t = 0; t < 60; t++){
+        const x = 7.5 + Math.random()*20, y = 7.5 + Math.random()*20;
+        if (solid(x, y, .6) || Math.hypot(x - P.x, y - P.y) < 5) continue;
+        e.x = x; e.y = y; break;
+      }
+      booms.push({x:e.x, y:e.y, t:.2});
+      beep("sine", 900, .3, .15, 200);
+    }
+  } else {
+    const rage = 1 + (1 - frac) * 1.1;
+    if (d > 1.6) moveEnemy(e, mx*sp*rage, my*sp*rage);
+    else if (e.cd <= 0){ e.cd = .95 * rateMul() / rage; damagePlayer(e.dmg + dmgBonus(), e.x, e.y); }
+    if (frac < .5 && !e.enraged){
+      e.enraged = true;
+      showBanner(`${e.name} В ЯРОСТИ`, true);
+      beep("sawtooth", 70, 1, .3, 140);
+    }
+  }
+}
+
 function moveEnemy(e, dx, dy){
-  if (dx && !solid(e.x + dx, e.y, ER)) e.x += dx;
-  if (dy && !solid(e.x, e.y + dy, ER)) e.y += dy;
+  const r = e.rad || ER;
+  if (dx && !solid(e.x + dx, e.y, r)) e.x += dx;
+  if (dy && !solid(e.x, e.y + dy, r)) e.y += dy;
   if (solid(e.x, e.y, .06)) unstick(e);
 }
 
@@ -130,9 +212,10 @@ function damageEnemy(e, dmg){
   if (!e.alive) return;
   e.hp -= dmg;
   e.hurtT = .14;
-  if (e.hp > 0){ beep("triangle", 320, .07, .1); return; }
+  if (e.hp > 0){ beep("triangle", e.boss ? 150 : 320, .07, .1); return; }
   e.alive = false; e.deadT = 0; e.bloodT = 2.6;
   registerKill();
+  if (e.boss){ bossDefeated(e); return; }
   const dry = ammo.bullets < 12 && ammo.shells < 3;
   if (dry || Math.random() < curve().dropChance){
     const r = Math.random();
@@ -165,7 +248,7 @@ function explode(x, y){
   beep("sawtooth", 70, .4, .3, 40);
   noiseBurst(.55, .4, 1400, .7);
   boomLight = 1; boomX = x; boomY = y;
-  const R = 3.1, D = 62 * (buff === "rage" ? 2 : 1);
+  const R = 3.1, D = 62 * (BT.rage > 0 ? 2 : 1);
   for (const e of enemies){
     if (!e.alive) continue;
     const d = Math.hypot(e.x - x, e.y - y);
@@ -187,7 +270,7 @@ function shoot(){
   if (gun === 1) noiseBurst(.3, .35, 2600, 1);
   else if (g.launcher) noiseBurst(.2, .3, 900, 1);
   playFireAnim();
-  const mult = buff === "rage" ? 2 : 1;
+  const mult = BT.rage > 0 ? 2 : 1;
   if (g.launcher){
     stat.fired++;
     grenades.push({x:P.x + Math.cos(P.a)*.4, y:P.y + Math.sin(P.a)*.4,
@@ -225,7 +308,7 @@ function canSee(e){
 }
 
 function damagePlayer(amount, sx, sy){
-  if (P.inv > 0 || buff === "shield" || god) return;
+  if (P.inv > 0 || BT.shield > 0 || god) return;
   if (sx !== undefined){
     const rel = angleDiff(Math.atan2(sy - P.y, sx - P.x), P.a);
     P.hitDir = Math.abs(rel) < .6 ? 0 : (rel < 0 ? -1 : 1);
@@ -268,7 +351,7 @@ function update(dt){
   fw += touch.fw; st += touch.st;
 
   const sprint = gun === 0 && wpnSwitch === -1 ? 1.08 : 1;
-  const sp = 2.7 * (buff === "haste" ? 1.42 : 1) * sprint * dt;
+  const sp = 2.7 * (BT.haste > 0 ? 1.42 : 1) * sprint * dt;
   if (fw || st){
     const len = Math.hypot(fw, st) || 1;
     const f = fw/len, s = st/len;
@@ -306,18 +389,33 @@ function update(dt){
     if (comboT <= 0){ combo = 0; HUD.combo.classList.remove("show"); }
   }
 
-  const buffEl = HUD.buff;
-  if (buff){
-    buffT -= dt;
-    if (buffT <= 0){ buff = null; buffShown = -1; buffEl.classList.add("gone"); beep("sine", 200, .2, .1); }
-    else {
-      const sec = Math.ceil(buffT);
-      if (sec !== buffShown){
-        buffShown = sec;
-        buffEl.textContent = `${BUFFS[buff].name} · ${sec}`;
-        buffEl.classList.remove("gone");
-      }
+  if (shake > 0) shake = Math.max(0, shake - dt*1.6);
+  const bb = document.getElementById("bossbar");
+  if (bossRef && bossRef.alive){
+    const pct = Math.max(0, bossRef.hp / bossRef.maxHp);
+    const key = Math.ceil(bossRef.hp);
+    if (bb.dataset.k !== String(key)){
+      bb.dataset.k = key;
+      document.getElementById("bossfill").style.width = (pct * 100).toFixed(1) + "%";
+      document.getElementById("bossnum").textContent = `${Math.max(0, key)} / ${bossRef.maxHp}`;
+      document.getElementById("bossname").textContent = bossRef.name;
     }
+    bb.classList.remove("gone");
+  } else bb.classList.add("gone");
+
+  const buffEl = HUD.buff;
+  let bKey = "", expired = false;
+  for (const k in BT){
+    if (BT[k] <= 0) continue;
+    BT[k] -= dt;
+    if (BT[k] <= 0){ BT[k] = 0; expired = true; continue; }
+    bKey += (bKey ? "   " : "") + `${BUFFS[k].name} · ${Math.ceil(BT[k])}`;
+  }
+  if (expired){ beep("sine", 200, .2, .1); updateInvUI(); }
+  if (bKey !== buffShownKey){
+    buffShownKey = bKey;
+    if (bKey){ buffEl.textContent = bKey; buffEl.classList.remove("gone"); }
+    else buffEl.classList.add("gone");
   }
 
   for (const b of grenades){
@@ -399,6 +497,7 @@ function update(dt){
       const f = flowDir(e);
       if (f){ mx = f.x; my = f.y; }
     }
+    if (e.boss){ bossAI(e, dt, d, ux, uy, mx, my, sees); continue; }
     let wx = 0, wy = 0, wantMove = false;
 
     if (k.melee){
@@ -539,9 +638,18 @@ function update(dt){
       showBanner(`${GUNS[n].name} НАЙДЕН`, true);
       beep("square", 300, .5, .18, 900);
     } else if (BUFFS[it.kind]){
-      buff = it.kind; buffT = BUFFS[it.kind].time; buffShown = -1;
-      showBanner(BUFFS[it.kind].name, true);
+      const k = it.kind;
+      if (inv[k] < INV_MAX){
+        inv[k]++;
+        showBanner(`${BUFFS[k].name} В ЗАПАСЕ`, true,
+          HAS_TOUCH ? "включай кнопкой справа, когда нужно" : "включай клавишами Z / X / C");
+      } else {
+        BT[k] = Math.min(BUFF_CAP, BT[k] + BUFFS[k].time);
+        buffShownKey = "";
+        showBanner(BUFFS[k].name, true, "запас полон — включён сразу");
+      }
       beep("sine", 400, .4, .16, 1100);
+      updateInvUI();
     }
     if (taken){
       it.dead = true; P.pick = .8;
@@ -599,10 +707,35 @@ function lampArt(on){
   return c;
 }
 var LAMP_ON = lampArt(true), LAMP_OFF = lampArt(false);
+var LAMP_CONE = (() => {
+  const c = document.createElement("canvas"); c.width = c.height = 64;
+  const g = c.getContext("2d");
+  const raw = document.createElement("canvas"); raw.width = raw.height = 64;
+  const r = raw.getContext("2d");
+  const cone = r.createLinearGradient(0, 12, 0, 60);
+  cone.addColorStop(0, "rgba(255,214,150,.42)");
+  cone.addColorStop(.6, "rgba(255,200,130,.12)");
+  cone.addColorStop(1, "rgba(255,190,120,.03)");
+  r.fillStyle = cone;
+  r.beginPath(); r.moveTo(28, 12); r.lineTo(36, 12); r.lineTo(58, 60); r.lineTo(6, 60); r.closePath(); r.fill();
+  r.save();
+  r.translate(32, 59); r.scale(1, .2);
+  const pool = r.createRadialGradient(0, 0, 0, 0, 0, 28);
+  pool.addColorStop(0, "rgba(255,214,150,.55)");
+  pool.addColorStop(.5, "rgba(255,200,130,.2)");
+  pool.addColorStop(1, "rgba(255,190,120,0)");
+  r.fillStyle = pool;
+  r.beginPath(); r.arc(0, 0, 28, 0, Math.PI*2); r.fill();
+  r.restore();
+  g.filter = "blur(2px)";
+  g.drawImage(raw, 0, 0);
+  g.filter = "none";
+  return c;
+})();
 var BUFF_LIGHT = { rage:1, haste:2, shield:3 };
 var TINT = LIGHT_COLORS.map(([r,g,b]) => {
   const a = [];
-  for (let i = 0; i < 32; i++) a.push(`rgba(${r},${g},${b},${(i/31*.3).toFixed(3)})`);
+  for (let i = 0; i < 32; i++) a.push(`rgba(${r},${g},${b},${(i/31*.45).toFixed(3)})`);
   return a;
 });
 var GLOW = LIGHT_COLORS.map(([r,g,b]) => {
@@ -629,12 +762,12 @@ function addLight(x, y, r, inten, color, yOff){
 
 function collectLights(){
   nL = 0;
-  for (const b of shots) addLight(b.x, b.y, 2.4, .42, 0, .05);
+  for (const b of shots) addLight(b.x, b.y, 3.0, .8, 0, .05);
   for (const it of items){
     const c = BUFF_LIGHT[it.kind];
-    if (c !== undefined) addLight(it.x, it.y, 2.4, .45 * (.8 + .2*Math.sin(clock*5 + it.x)), c, .32);
+    if (c !== undefined) addLight(it.x, it.y, 2.6, .7 * (.8 + .2*Math.sin(clock*5 + it.x)), c, .32);
   }
-  for (const e of booms) addLight(e.x, e.y, 5, 1.2 * Math.max(0, 1 - e.t/.45), 4, .05);
+  for (const e of booms) addLight(e.x, e.y, 5.5, 1.5 * Math.max(0, 1 - e.t/.45), 4, .05);
 }
 
 function lightAt(x, y){
@@ -672,7 +805,7 @@ for (let i = 0; i < 256; i++){
 function render(){
   const dirX = Math.cos(P.a), dirY = Math.sin(P.a);
   const planeX = -dirY*.66, planeY = dirX*.66;
-  const shakeAmp = (P.hp < 45 ? (1 - P.hp/45)*2.2 : 0) + (P.hitT > 0 ? P.hitT*9 : 0);
+  const shakeAmp = (P.hp < 45 ? (1 - P.hp/45)*2.2 : 0) + (P.hitT > 0 ? P.hitT*9 : 0) + shake*6;
   const horizon = H*.5 + (shakeAmp ? Math.sin(clock*17)*shakeAmp + (Math.random()-.5)*shakeAmp*.6 : 0);
 
   if (fogGamma !== SET.gamma) buildFogLUT(SET.gamma);
@@ -738,7 +871,7 @@ function render(){
       }
       if (lit > .02){
         if (fi >= 0){
-          fi = (fi * (1 - Math.min(1, lit) * .6)) | 0;
+          fi = (fi * (1 - Math.min(1, lit) * .75)) | 0;
           if (fi < 5) fi = -1;
         }
         const a = Math.min(31, (lit * 22) | 0);
@@ -792,7 +925,7 @@ function render(){
     o.tx = invDet*(dirY*sx - dirX*sy); o.ty = ty;
     o.hurt = false; o.eyes = false; o.dead = false; o.deadT = 0;
     o.deadBlood = false; o.bloodT = 0; o.boom = false; o.boomT = 0;
-    o.emit = false; o.glow = -1; o.glowA = 0;
+    o.emit = false; o.glow = -1; o.glowA = 0; o.tint = null;
     drawn.push(o);
     return o;
   };
@@ -800,10 +933,12 @@ function render(){
   for (const e of enemies){
     const k = KIND[e.type];
     const dead = !e.alive;
+    const sc = e.scale || k.scale;
     const o = addSprite(e.x, e.y,
-      dead ? ART.corpse[e.type] : ART[k.art][(e.t*4|0) % 2],
-      dead ? k.scale * .92 : k.scale,
-      dead ? (.24 + Math.min(.18, e.deadT*.55)) : 0);
+      dead ? ART.corpse[e.boss ? "imp" : e.type] : ART[k.art][(e.t*4|0) % 2],
+      dead ? sc * .92 : sc,
+      dead ? (.24 + Math.min(.18, e.deadT*.55)) : (e.boss ? .5 - sc/2 : 0));
+    if (o) o.tint = e.tint || null;
     if (o){
       o.hurt = !dead && e.hurtT > 0;
       o.eyes = !dead && e.seen;
@@ -820,25 +955,27 @@ function render(){
     const c = BUFF_LIGHT[it.kind];
     if (o && c !== undefined){
       o.emit = true;
-      const g = addSprite(it.x, it.y, GLOW[c], 1.1, .32);
-      if (g){ g.glow = c; g.glowA = .4 + .12*Math.sin(clock*5 + it.x); }
+      const g = addSprite(it.x, it.y, GLOW[c], 1.3, .32);
+      if (g){ g.glow = c; g.glowA = .6 + .18*Math.sin(clock*5 + it.x); }
     }
   }
   for (const L of LAMPS){
     const lit = L.val > .5;
-    const o = addSprite(L.x + .5, L.y + .5, lit ? LAMP_ON : LAMP_OFF, .34, -.36);
+    const o = addSprite(L.x + .5, L.y + .5, lit ? LAMP_ON : LAMP_OFF, .26, -.4);
     if (o && lit){
       o.emit = true;
-      const g = addSprite(L.x + .5, L.y + .5, GLOW[5], .9, -.33);
-      if (g){ g.glow = 5; g.glowA = .38 * L.val; }
+      const cn = addSprite(L.x + .5, L.y + .5, LAMP_CONE, 1, 0);
+      if (cn){ cn.glow = 5; cn.glowA = .7 * L.val; }
+      const g = addSprite(L.x + .5, L.y + .5, GLOW[5], .7, -.37);
+      if (g){ g.glow = 5; g.glowA = .45 * L.val; }
     }
   }
   for (const b of shots){
     const o = addSprite(b.x, b.y, ART.fireball, .45, .05);
     if (o){
       o.emit = true;
-      const g = addSprite(b.x, b.y, GLOW[0], .95, .05);
-      if (g){ g.glow = 0; g.glowA = .4; }
+      const g = addSprite(b.x, b.y, GLOW[0], 1.2, .05);
+      if (g){ g.glow = 0; g.glowA = .7; }
     }
   }
   for (const b of grenades) addSprite(b.x, b.y, ART.grenade, .3, .18);
@@ -915,9 +1052,15 @@ function render(){
       sctx.fillRect(0, 0, 64, 64);
       sctx.globalCompositeOperation = "source-over";
     }
+    if (o.tint){
+      sctx.globalCompositeOperation = "source-atop";
+      sctx.fillStyle = o.tint;
+      sctx.fillRect(0, 0, 64, 64);
+      sctx.globalCompositeOperation = "source-over";
+    }
     if (o.hurt){
       sctx.globalCompositeOperation = "source-atop";
-      sctx.fillStyle = "rgba(255,238,225,.68)";
+      sctx.fillStyle = "rgba(255,235,220,.55)";
       sctx.fillRect(0, 0, 64, 64);
       sctx.globalCompositeOperation = "source-over";
     }

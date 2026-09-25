@@ -13,8 +13,8 @@ function fpsTick(rawMs){
 }
 
 var layoutEdit = false;
-var CTRL_IDS = ["stick", "fire", "swap", "pausebtn", "minimap"];
-var CTRL_ORIGIN = { stick:"left bottom", fire:"right bottom", swap:"right bottom", pausebtn:"right top", minimap:"left top" };
+var CTRL_IDS = ["stick", "fire", "swap", "pausebtn", "minimap", "invbar"];
+var CTRL_ORIGIN = { stick:"left bottom", fire:"right bottom", swap:"right bottom", pausebtn:"right top", minimap:"left top", invbar:"right bottom" };
 
 function applyControls(){
   for (const id of CTRL_IDS){
@@ -115,6 +115,7 @@ function initSettings(){
     });
     input.addEventListener("change", saveSettings);
   }
+  for (const b of document.querySelectorAll("#invbar .inv")) onTap(b, () => useBuff(b.dataset.b));
   onTap(document.getElementById("settingsbtn"), () => openSettings("menu"));
   onTap(document.getElementById("settingsbtn2"), () => openSettings("pause"));
   onTap(document.getElementById("setclose"), closeSettings);
@@ -158,7 +159,8 @@ function loop(t){
   const rawMs = (t - last) || 0;
   fpsTick(rawMs);
   const dt = Math.min(.05, rawMs/1000); last = t;
-  if (playing && !paused && !dbgShown){
+  if (introT > 0){ introT -= dt; }
+  else if (playing && !paused && !dbgShown){
     update(dt);
     autoSave += dt;
     if (autoSave > 15){ autoSave = 0; saveGame(); }
@@ -273,6 +275,11 @@ function beginRun(sv){
     runSeed = (num(sv.seed, runSeed) >>> 0) || runSeed;
     seedName = typeof sv.seedName === "string" ? sv.seedName : "";
     cheated = !!sv.cheated;
+    if (Array.isArray(sv.inv)){
+      inv.rage = Math.min(INV_MAX, num(sv.inv[0], 0) | 0);
+      inv.haste = Math.min(INV_MAX, num(sv.inv[1], 0) | 0);
+      inv.shield = Math.min(INV_MAX, num(sv.inv[2], 0) | 0);
+    }
     playing = true;
     nextLevel();
   } else {
@@ -315,13 +322,16 @@ function quitToMenu(){
   saveGame();
   setDrone(0);
   cheated = false; god = false; brightMode = false; sandbox = false; dbgFreeze = false;
-  buff = null; buffT = 0;
+  for (const k in BT) BT[k] = 0;
   dbgUnlocked = false;
   debugOpen(false);
   paused = false;
   pauseBox.classList.add("gone");
   pauseBtn.classList.add("gone");
   playing = false;
+  updateInvUI();
+  bossRef = null; introT = 0;
+  document.getElementById("bossbar").classList.add("gone");
   faceCv.classList.add("gone");
   screen.classList.remove("hide", "death");
   title.innerHTML = TITLE0;
@@ -547,6 +557,9 @@ function gameOver(){
   saveRecord();
   if (!cheated) clearSave();
   playing = false;
+  updateInvUI();
+  bossRef = null; introT = 0;
+  document.getElementById("bossbar").classList.add("gone");
   screen.classList.remove("hide");
   screen.classList.add("death");
   const line = DEATHS[Math.floor(Math.random()*DEATHS.length)];
@@ -582,14 +595,29 @@ onTap(pauseSeedBtn, () => copyText(seedText(), pauseSeedBtn));
 onTap(document.getElementById("resume"), () => setPause(false));
 onTap(document.getElementById("quit"), quitToMenu);
 
+var CODE_KEY = {
+  KeyW:"w", KeyA:"a", KeyS:"s", KeyD:"d", KeyQ:"q", KeyE:"e", KeyP:"p",
+  KeyZ:"z", KeyX:"x", KeyC:"c",
+  Digit1:"1", Digit2:"2", Digit3:"3", Digit4:"4",
+  Numpad1:"1", Numpad2:"2", Numpad3:"3", Numpad4:"4",
+  Space:" ", ArrowUp:"arrowup", ArrowDown:"arrowdown", ArrowLeft:"arrowleft", ArrowRight:"arrowright"
+};
+function keyOf(e){ return CODE_KEY[e.code] || (e.key || "").toLowerCase(); }
+
 addEventListener("keydown", e => {
-  const k = e.key.toLowerCase();
-  if (playing && (e.key === "Escape" || k === "p" || k === "з")) setPause(!paused);
+  if (e.target && e.target.tagName === "INPUT") return;
+  const k = keyOf(e);
+  if (playing && (e.key === "Escape" || k === "p")) setPause(!paused);
+});
+addEventListener("blur", () => {
+  for (const k in keys) keys[k] = false;
+  mouseHeld = false; fireHeld = false;
 });
 
 var mouseHeld = false, fireHeld = false;
 addEventListener("keydown", e => {
-  const k = e.key.toLowerCase();
+  if (e.target && e.target.tagName === "INPUT") return;
+  const k = keyOf(e);
   keys[k] = true;
   if (k === "1") switchGun(0);
   if (k === "2") switchGun(1);
@@ -597,9 +625,12 @@ addEventListener("keydown", e => {
   if (k === "4") switchGun(3);
   if (k === "q") switchGun(gun - 1);
   if (k === "e") switchGun(gun + 1);
+  if (k === "z") useBuff("rage");
+  if (k === "x") useBuff("haste");
+  if (k === "c") useBuff("shield");
   if (e.code === "Space") e.preventDefault();
 });
-addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+addEventListener("keyup", e => { keys[keyOf(e)] = false; });
 cv.addEventListener("mousedown", e => {
   if (!playing) return;
   if (cv.requestPointerLock && document.pointerLockElement !== cv){

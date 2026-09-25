@@ -2,7 +2,7 @@
 
 var MW = 35, MH = 35;
 var SET_KEY = "terplandia3d.settings";
-var CTRL_KEYS = ["stick", "fire", "swap", "pausebtn", "minimap"];
+var CTRL_KEYS = ["stick", "fire", "swap", "pausebtn", "minimap", "invbar"];
 function defaultCtrl(){
   const c = {};
   for (const k of CTRL_KEYS) c[k] = { size:1, alpha: k === "minimap" ? .62 : 1 };

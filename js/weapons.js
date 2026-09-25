@@ -303,7 +303,7 @@ function drawLastMarkers(horizon){
     const screenX = ty > .2 ? (W/2)*(1 + tx/ty) : -1;
 
     if (ty > .2 && screenX >= 0 && screenX < W){
-      const sh = Math.abs(H/ty) * KIND[e.type].scale;
+      const sh = Math.abs(H/ty) * (e.scale || KIND[e.type].scale);
       const top = horizon - sh/2;
       const y = Math.max(4, Math.min(H - size - 2, top - size*1.6));
       ctx.beginPath();
@@ -371,7 +371,8 @@ function drawMinimap(){
   mm.fillStyle = "#c8160e";
   for (const e of enemies){
     if (!e.alive) continue;
-    mm.fillRect(ox + e.x*s - s/2, oy + e.y*s - s/2, s, s);
+    const r = e.boss ? s*2.2 : s;
+    mm.fillRect(ox + e.x*s - r/2, oy + e.y*s - r/2, r, r);
   }
   for (const b of shots){
     const sp = Math.hypot(b.vx, b.vy) || 1;
