@@ -251,6 +251,17 @@
 
   #cont:active{background:var(--bone)}
   .gone{display:none!important}
+  #minimap{
+    position:absolute;left:6px;top:calc(6px + env(safe-area-inset-top));width:110px;height:auto;
+    pointer-events:none;opacity:.62;transform-origin:left top;
+    image-rendering:-webkit-optimize-contrast;image-rendering:pixelated;
+  }
+  #xhair{
+    position:absolute;left:50%;top:50%;width:160px;height:160px;transform:translate(-50%,-50%);
+    pointer-events:none;
+  }
+  body.editing #minimap{pointer-events:auto;outline:2px dashed var(--slime);outline-offset:4px;z-index:9;cursor:move}
+  body.desktop.editing #stick, body.desktop.editing #fire, body.desktop.editing #swap{display:none!important}
   .hidden-edit{display:none!important}
   kbd{background:rgba(232,220,192,.12);border:1px solid rgba(232,220,192,.3);padding:1px 6px;font-size:12px}
 
