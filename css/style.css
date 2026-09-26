@@ -289,6 +289,15 @@
   #diploma.show .dip-stamp{animation:dipStamp .5s .8s cubic-bezier(.3,1.6,.5,1) both}
   @keyframes dipIn{0%{transform:translateY(60px) scale(.9);opacity:0}100%{transform:none;opacity:1}}
   @keyframes dipStamp{0%{transform:rotate(-14deg) scale(3);opacity:0}100%{transform:rotate(-14deg) scale(1);opacity:1}}
+  #revive{position:absolute;z-index:11;pointer-events:none}
+  #revive i{position:absolute;inset:0;background-size:100% 100%;image-rendering:pixelated;
+    filter:drop-shadow(0 0 18px rgba(255,40,70,.7))}
+  #revive .hl{clip-path:polygon(0 0,50% 0,44% 22%,56% 40%,45% 58%,55% 76%,50% 100%,0 100%)}
+  #revive .hr{clip-path:polygon(50% 0,100% 0,100% 100%,50% 100%,55% 76%,45% 58%,56% 40%,44% 22%)}
+  body.rbd #c{filter:grayscale(.85) brightness(.55);transition:filter .3s}
+  #c{transition:filter .5s}
+  #seedtag{position:absolute;left:0;right:0;top:calc(2px + env(safe-area-inset-top));text-align:center;
+    font-size:9px;letter-spacing:3px;color:#e8c85a;opacity:.7;pointer-events:none;z-index:4}
   #bossbar{
     position:absolute;left:calc(50% + 16px);top:calc(12px + env(safe-area-inset-top));transform:translateX(-50%);
     width:min(44vw,340px);z-index:4;text-align:center;pointer-events:none;color:var(--bone);
