@@ -176,6 +176,31 @@ function bloodSplash(){
   return s;
 }
 
+function lifeHeart(){
+  const [s,g] = blank();
+  const px = [
+    "..XXX...XXX..",
+    ".XXXXX.XXXXX.",
+    "XXWXXXXXXXXXX",
+    "XWXXXXXXXXXXX",
+    "XXXXXXXXXXXXX",
+    ".XXXXXXXXXXX.",
+    "..XXXXXXXXX..",
+    "...XXXXXXX...",
+    "....XXXXX....",
+    ".....XXX.....",
+    "......X......"
+  ];
+  const k = 3, ox = 32 - 13*k/2, oy = 18;
+  for (let y = 0; y < px.length; y++) for (let x = 0; x < px[y].length; x++){
+    const c = px[y][x];
+    if (c === ".") continue;
+    g.fillStyle = c === "W" ? "#ffd6dc" : (y > 6 ? "#b0142a" : "#e02846");
+    g.fillRect(ox + x*k, oy + y*k, k, k);
+  }
+  return s;
+}
+
 function medkit(){
   const [s,g] = blank();
   g.fillStyle = "#e8e2d2"; g.fillRect(14, 22, 36, 26);
@@ -347,6 +372,7 @@ var ART = {
           boss_final:CHAR.boss_final.corpse},
   bloodSplash:bloodSplash(),
   medkit:medkit(),
+  life:lifeHeart(),
   armor:armorItem(),
   bullets:ammoBox("#4a7a2e","П"),
   shells:ammoBox("#8a2320","Д"),

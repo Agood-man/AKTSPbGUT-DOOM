@@ -148,7 +148,7 @@ function finalAI(e, dt, d, ux, uy, mx, my, sees, frac){
   if (e.dash > 0){
     e.dash -= dt;
     moveEnemy(e, e.ddx*sp*4.2, e.ddy*sp*4.2);
-    if (e.dash <= 0 || d < 1.8){ e.dash = 0; bossSlam(e, 3.4, 4); }
+    if (e.dash <= 0 || d < 1.8){ e.dash = 0; bossSlam(e, 3.6, 10); }
   } else {
     const want = phase === 1 ? 6.5 : 4.5;
     if (!sees || d > want + 1) moveEnemy(e, mx*sp, my*sp);
@@ -156,28 +156,30 @@ function finalAI(e, dt, d, ux, uy, mx, my, sees, frac){
     else moveEnemy(e, -uy*sp*.6*e.strafe, ux*sp*.6*e.strafe);
     if (Math.random() < dt*.25) e.strafe *= -1;
   }
-  if (d < 2.1 && e.cd <= 0){ e.cd = 1.3 * rateMul(); damagePlayer(18 + dmgBonus()*.5, e.x, e.y); }
+  if (d < 2.1 && e.cd <= 0){
+    if (phase === 3){ e.cd = 1.1 * rateMul(); damagePlayer(e.dmg + dmgBonus(), e.x, e.y); }
+    else { e.cd = 1.3 * rateMul(); damagePlayer(18 + dmgBonus()*.5, e.x, e.y); }
+  }
   e.atk -= dt; e.atk2 -= dt; e.atk3 = (e.atk3 || 6) - dt;
   const busy = shots.length > 22;
   if (phase === 1){
     if (e.atk <= 0 && sees && !busy){ e.atk = 3.1; finalVolley(e, ux, uy, 2, .24, .8); beep("sine", 260, .3, .16, 90); }
     if (e.atk2 <= 0){ e.atk2 = 15; summonMinions(e, "imp", 2, 3); }
   } else if (phase === 2){
-    if (e.atk <= 0 && sees && !busy){ e.atk = 3.4; finalVolley(e, ux, uy, 1, .28, .85); }
+    if (e.atk <= 0 && sees && !busy){ e.atk = 3.0; finalVolley(e, ux, uy, 2, .22, .85); }
     if (e.atk2 <= 0 && !e.dash && sees){
-      e.atk2 = 5.5; e.dash = .6; e.ddx = ux; e.ddy = uy;
+      e.atk2 = 4.8; e.dash = .6; e.ddx = ux; e.ddy = uy;
       beep("sawtooth", 70, .6, .3, 180);
     }
-    if (e.atk3 <= 0){ e.atk3 = 17; summonMinions(e, "imp", 2, 2); }
+    if (e.atk3 <= 0){ e.atk3 = 15; summonMinions(e, "imp", 2, 3); }
   } else {
-    e.spin = (e.spin || 0) + dt * 1.6;
-    e.spinCycle = ((e.spinCycle || 0) + dt) % 6;
+    e.spin = (e.spin || 0) + dt * 2.3;
     e.spinT = (e.spinT || 0) - dt;
-    if (e.spinCycle < 3.5 && e.spinT <= 0 && !busy){
-      e.spinT = .3;
-      for (let k = 0; k < 2; k++){ const ang = e.spin + k * Math.PI; bossFireDir(e, Math.cos(ang), Math.sin(ang), .6, 12); }
+    if (e.spinT <= 0){
+      e.spinT = .16;
+      for (let k = 0; k < 3; k++){ const ang = e.spin + k * 2.094; bossFireDir(e, Math.cos(ang), Math.sin(ang), .7); }
     }
-    if (e.atk2 <= 0){ e.atk2 = 16; summonMinions(e, "bull", 1, 2); }
+    if (e.atk2 <= 0){ e.atk2 = 11; summonMinions(e, "bull", 2, 4); }
     e.tp = (e.tp || 0) - dt;
     if (d < 2.4 && e.tp <= 0){
       e.tp = 4;
@@ -433,6 +435,7 @@ function damagePlayer(amount, sx, sy){
   beep("square", 80, .22, .28);
   updateHUD();
   if (P.hp <= 0 && god) P.hp = 100;
+  if (P.hp <= 0 && lives > 0){ revivePlayer(); return; }
   if (P.hp <= 0) gameOver();
 }
 
@@ -745,7 +748,16 @@ function update(dt){
     const ix = it.x - P.x, iy = it.y - P.y;
     if (ix*ix + iy*iy > (PR + .38)*(PR + .38)) continue;
     let taken = true;
-    if (it.kind === "medkit"){
+    if (it.kind === "life"){
+      if (lives >= LIVES_MAX) taken = false;
+      else {
+        lives++;
+        showBanner("ВТОРАЯ ЖИЗНЬ", true, `жизней в запасе: ${lives}`);
+        beep("sine", 520, .5, .18, 1040);
+        setTimeout(() => beep("sine", 780, .5, .14, 1560), 150);
+        updateLivesUI();
+      }
+    } else if (it.kind === "medkit"){
       if (P.hp >= 100) taken = false; else P.hp = Math.min(100, P.hp + 22);
     } else if (it.kind === "armor"){
       if (P.armor >= 100) taken = false; else P.armor = Math.min(100, P.armor + 30);
@@ -897,7 +909,7 @@ function texLevel(hit, side, lvl){
   return c;
 }
 
-var LIGHT_COLORS = [[255,120,40], [210,55,30], [230,196,40], [70,165,215], [255,150,60], [255,214,150], [170,90,255]];
+var LIGHT_COLORS = [[255,120,40], [210,55,30], [230,196,40], [70,165,215], [255,150,60], [255,214,150], [170,90,255], [255,70,100]];
 var PORTAL_FRAMES = (() => {
   const frames = [];
   for (let f = 0; f < 16; f++){
@@ -966,7 +978,7 @@ var LAMP_CONE = (() => {
   g.filter = "none";
   return c;
 })();
-var BUFF_LIGHT = { rage:1, haste:2, shield:3 };
+var BUFF_LIGHT = { rage:1, haste:2, shield:3, life:7 };
 var TINT = LIGHT_COLORS.map(([r,g,b]) => {
   const a = [];
   for (let i = 0; i < 32; i++) a.push(`rgba(${r},${g},${b},${(i/31*.45).toFixed(3)})`);

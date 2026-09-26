@@ -324,7 +324,7 @@ function drawLastMarkers(horizon){
 var MAP_COLOR = {
   medkit:"#7ba428", armor:"#4f7fa0", bullets:"#c9a227",
   shells:"#c9622a", grenades:"#5b4a8c",
-  gun1:"#efe6cc", gun2:"#efe6cc", gun3:"#efe6cc"
+  gun1:"#efe6cc", gun2:"#efe6cc", gun3:"#efe6cc", life:"#ff3a5a"
 };
 
 var mapCache = null, mapCacheKey = "", mapSigT = 0, mapSig = 0;
@@ -384,7 +384,7 @@ function drawMinimap(){
   }
   for (const it of items){
     const ix = ox + it.x*s, iy = oy + it.y*s;
-    const special = BUFFS[it.kind] || GUN_OF[it.kind] !== undefined;
+    const special = BUFFS[it.kind] || GUN_OF[it.kind] !== undefined || it.kind === "life";
     mm.fillStyle = BUFFS[it.kind] ? BUFFS[it.kind].color : (MAP_COLOR[it.kind] || "#7ba428");
     if (special){
       const r = s * (1.5 + .5*Math.sin(clock*6));

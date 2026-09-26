@@ -313,6 +313,8 @@ function beginRun(sv){
     seedName = typeof sv.seedName === "string" ? sv.seedName : "";
     cheated = !!sv.cheated;
     runTime = num(sv.time, 0);
+    lives = Math.min(LIVES_MAX, Math.max(0, num(sv.lives, 0) | 0));
+    lifeDrops = Math.max(0, num(sv.lifeDrops, 0) | 0);
     if (Array.isArray(sv.inv)){
       inv.rage = Math.min(INV_MAX, num(sv.inv[0], 0) | 0);
       inv.haste = Math.min(INV_MAX, num(sv.inv[1], 0) | 0);
@@ -368,6 +370,7 @@ function quitToMenu(){
   pauseBtn.classList.add("gone");
   playing = false;
   updateInvUI();
+  updateLivesUI();
   bossRef = null; portal = null; stopBossIntro();
   document.getElementById("bossbar").classList.add("gone");
   faceCv.classList.add("gone");
@@ -596,6 +599,7 @@ function gameOver(){
   if (!cheated) clearSave();
   playing = false;
   updateInvUI();
+  updateLivesUI();
   bossRef = null; portal = null; stopBossIntro();
   document.getElementById("bossbar").classList.add("gone");
   screen.classList.remove("hide");

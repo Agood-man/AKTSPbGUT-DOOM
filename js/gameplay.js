@@ -7,6 +7,7 @@ function saveGame(){
     bullets:ammo.bullets, shells:ammo.shells, grenades:ammo.grenades,
     guns:unlocked.reduce((m, v, i) => m | (v ? 1 << i : 0), 0),
     inv:[inv.rage, inv.haste, inv.shield],
+    lives, lifeDrops,
     time:Math.round(runTime)
   }));
 }
@@ -136,6 +137,47 @@ var keys = {};
 
 var bossRef = null, introT = 0, shake = 0, portal = null, portalT = 0;
 var runTime = 0, finalOutro = null, diplomaShown = false;
+var lives = 0, LIVES_MAX = 9, LIFE_DROP = .15, LIFE_DROP_FINAL = .35;
+var lifeDrops = 0, LIFE_PITY_BOSS = 4, LIFE_CAP_BEFORE_FINAL = 4;
+
+function lifeChanceFor(e){
+  if (e.kind === "final") return LIFE_DROP_FINAL;
+  if (level >= FINAL_LEVEL) return LIFE_DROP;
+  if (lifeDrops >= LIFE_CAP_BEFORE_FINAL) return 0;
+  if (lifeDrops === 0 && Math.floor(level / BOSS_EVERY) >= LIFE_PITY_BOSS) return 1;
+  return LIFE_DROP;
+}
+
+function updateLivesUI(){
+  const el = document.getElementById("lives");
+  el.textContent = `♥ ${lives}`;
+  el.classList.toggle("gone", !playing || lives <= 0);
+}
+
+function revivePlayer(){
+  lives--;
+  P.hp = 75; P.inv = 2.2; P.hitT = 0;
+  for (const s of shots) if (Math.hypot(s.x - P.x, s.y - P.y) < 5) s.dead = true;
+  for (const e of enemies){
+    if (!e.alive || e.boss) continue;
+    const dx = e.x - P.x, dy = e.y - P.y, d = Math.hypot(dx, dy);
+    if (d < 3.2 && d > .01){
+      let k = (3.2 - d) / d;
+      for (let t = 0; t < 4; t++, k *= .5){
+        if (!solid(e.x + dx*k, e.y + dy*k, .34)){ e.x += dx*k; e.y += dy*k; break; }
+      }
+      e.cd = Math.max(e.cd, 1.2);
+    }
+  }
+  for (let i = 0; i < 8; i++) booms.push({x:P.x + Math.cos(i*.785)*1.4, y:P.y + Math.sin(i*.785)*1.4, t:.1});
+  boomLight = 1; boomX = P.x; boomY = P.y;
+  shake = Math.max(shake, 1);
+  beep("sine", 330, .8, .2, 990);
+  setTimeout(() => beep("sine", 660, .6, .16, 1320), 180);
+  showBanner("ВТОРАЯ ЖИЗНЬ", true, lives > 0 ? `осталось ещё ${lives}` : "это была последняя");
+  updateLivesUI();
+  updateHUD();
+}
 var DIPLOMA_KEY = "terplandia3d.diploma";
 
 function showDiploma(){
@@ -229,6 +271,7 @@ function bossDefeated(e){
   const bk = Object.keys(BUFFS);
   drop(bk[(Math.random()*bk.length)|0], 1);
   drop(bk[(Math.random()*bk.length)|0], 1);
+  if (Math.random() < lifeChanceFor(e)){ drop("life", 1); lifeDrops++; }
   for (const m of enemies) if (m.alive && m.minion){ m.alive = false; m.deadT = 0; }
   showBanner(`${e.name} ПОВЕРЖЕН${e.name.endsWith("А") ? "А" : ""}`, true, "забери награду");
 
@@ -448,6 +491,7 @@ function nextLevel(){
   wpnSeq = null; wpnFrame = 0; wpnOffset = 0; wpnSwitch = -1;
   updateHUD();
   updateInvUI();
+  updateLivesUI();
   saveGame();
 }
 
@@ -458,7 +502,7 @@ function reset(seed){
   unlocked = [true, false, false, false];
   gun = 0; kills = 0; level = 0;
   for (const k in BT){ BT[k] = 0; inv[k] = 0; }
-  runTime = 0;
+  runTime = 0; lives = 0; lifeDrops = 0;
   buffShownKey = "";
   combo = 0; comboT = 0;
   grenades.length = 0; booms.length = 0;
