@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="ПТУ 3D">
 <meta name="theme-color" content="#120c0a">
 
-<link rel="stylesheet" href="css/style.css?v=20260925h">
+<link rel="stylesheet" href="css/style.css?v=20260926a">
 </head>
 <body>
 <div id="wrap">
@@ -20,8 +20,25 @@
   <div id="hurt"></div>
   <div id="lowhp"></div>
   <div id="banner"></div>
+  <div id="diploma" class="gone">
+    <div class="dip">
+      <div class="dip-top">ПТУ 3D · ПОДЗЕМНОЕ ОТДЕЛЕНИЕ</div>
+      <h2>ДИПЛОМ</h2>
+      <div class="dip-sub">о среднем подземном образовании</div>
+      <p class="dip-text">Выдан студенту, который спустился на сто пятьдесят этажей, пережил сессию и лично отчислил Пал Палыча.</p>
+      <div class="dip-grid">
+        <span>Фрагов</span><b id="dip_kills"></b>
+        <span>Время</span><b id="dip_time"></b>
+        <span>Семя</span><b id="dip_seed"></b>
+        <span>Оценка</span><b id="dip_grade"></b>
+      </div>
+      <p class="dip-wish">Основная программа пройдена. Дальше — бесконечная аспирантура: этажи будут только злее. Удачи!</p>
+      <div class="dip-stamp">ЗАЧТЕНО</div>
+      <button id="dipclose" type="button">ПРОДОЛЖИТЬ ОБУЧЕНИЕ</button>
+    </div>
+  </div>
   <div id="bossbar" class="gone"><span id="bossname"></span><div id="bosshp"><i id="bossfill"></i></div><b id="bossnum"></b></div>
-  <div id="bossintro" class="gone"><img id="bossimg" alt=""><div class="bi"><b>БОЙ С БОССОМ</b><span id="bossiname"></span></div></div>
+  <div id="bossintro" class="gone"><img id="bossimg" alt=""><div class="bi"><b id="bosstitle">БОЙ С БОССОМ</b><span id="bossiname"></span></div></div>
   <button id="pausebtn" class="gone" aria-label="Пауза">❚❚</button>
   <canvas id="face" class="gone" width="40" height="48"></canvas>
   <div id="combo"></div>
@@ -136,6 +153,8 @@
     <label class="srow"><span id="calpha_label">Непрозрачность кнопки</span><input id="s_calpha" type="range" min="20" max="100" step="5"><b id="v_calpha"></b></label>
     <div class="sbtns">
       <button id="layoutbtn" type="button">РАСПОЛОЖЕНИЕ</button>
+      <button id="invdir" type="button"></button>
+      <button id="pcview" type="button"></button>
       <button id="setreset" type="button">СБРОСИТЬ ВСЁ</button>
     </div>
     <p id="setnote"></p>
@@ -178,16 +197,16 @@
 </div>
 
 
-<script src="js/core.js?v=20260925h"></script>
-<script src="js/textures.js?v=20260925h"></script>
-<script src="js/audio.js?v=20260925h"></script>
-<script src="js/state.js?v=20260925h"></script>
-<script src="js/gameplay.js?v=20260925h"></script>
-<script src="js/renderer.js?v=20260925h"></script>
-<script src="js/face.js?v=20260925h"></script>
-<script src="js/weapons.js?v=20260925h"></script>
-<script src="js/ui.js?v=20260925h"></script>
-<script src="js/main.js?v=20260925h"></script>
+<script src="js/core.js?v=20260926a"></script>
+<script src="js/textures.js?v=20260926a"></script>
+<script src="js/audio.js?v=20260926a"></script>
+<script src="js/state.js?v=20260926a"></script>
+<script src="js/gameplay.js?v=20260926a"></script>
+<script src="js/renderer.js?v=20260926a"></script>
+<script src="js/face.js?v=20260926a"></script>
+<script src="js/weapons.js?v=20260926a"></script>
+<script src="js/ui.js?v=20260926a"></script>
+<script src="js/main.js?v=20260926a"></script>
 <script>
 (function(){
   var CF_TOKEN = "990785e2778e46c89a8bcc756ab1f7a5";
