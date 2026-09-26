@@ -253,6 +253,37 @@
 
   #cont:active{background:var(--bone)}
   .gone{display:none!important}
+  #bossintro.final img{filter:none;object-fit:contain;background:radial-gradient(circle,#3a0d08,#000 70%)}
+  #bossintro.final .bi b{color:#ffd23a;text-shadow:0 0 16px #f60,0 3px 0 #000}
+  #bossintro.final.play{animation-duration:3.6s}
+  #bossintro.final.play img{animation-duration:3.6s, .09s}
+  #bossintro.final.play .bi{animation-duration:3.6s}
+  #bosshp{position:relative}
+  #bosshp.final::before,#bosshp.final::after{content:"";position:absolute;top:-2px;bottom:-2px;width:2px;background:rgba(232,220,192,.7)}
+  #bosshp.final::before{left:33%}
+  #bosshp.final::after{left:66%}
+  #diploma{position:absolute;inset:0;z-index:13;display:flex;align-items:center;justify-content:center;
+    background:rgba(8,5,4,.86);padding:16px;overflow-y:auto}
+  #diploma .dip{position:relative;width:min(92%,380px);padding:22px 20px 18px;text-align:center;
+    background:#efe6cf;color:#3a1c12;border:6px double #8a2a1c;box-shadow:0 20px 60px rgba(0,0,0,.8);
+    font-family:Georgia,"Times New Roman",serif}
+  #diploma.red .dip{border-color:#a3120b}
+  #diploma .dip-top{font-size:10px;letter-spacing:3px;opacity:.75}
+  #diploma h2{font-size:clamp(34px,11vw,52px);letter-spacing:8px;margin:8px 0 2px;color:#8a1a10}
+  #diploma .dip-sub{font-size:12px;font-style:italic;margin-bottom:12px}
+  #diploma .dip-text{font-size:13px;line-height:1.5;margin:0 0 12px}
+  #diploma .dip-grid{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;text-align:left;font-size:12px;
+    border-top:1px solid rgba(58,28,18,.3);border-bottom:1px solid rgba(58,28,18,.3);padding:8px 4px;margin-bottom:10px}
+  #diploma .dip-grid b{text-align:right;font-family:monospace}
+  #diploma .dip-wish{font-size:12px;line-height:1.45;margin:0 0 14px}
+  #diploma .dip-stamp{position:absolute;right:14px;top:62px;padding:6px 10px;border:3px solid rgba(163,18,11,.75);
+    color:rgba(163,18,11,.8);font:bold 16px monospace;letter-spacing:3px;transform:rotate(-14deg);border-radius:6px}
+  #diploma button{padding:11px 18px;font:inherit;font-size:13px;letter-spacing:2px;cursor:pointer;
+    background:#3a1c12;color:#efe6cf;border:none}
+  #diploma.show .dip{animation:dipIn .7s cubic-bezier(.2,.9,.3,1.2) both}
+  #diploma.show .dip-stamp{animation:dipStamp .5s .8s cubic-bezier(.3,1.6,.5,1) both}
+  @keyframes dipIn{0%{transform:translateY(60px) scale(.9);opacity:0}100%{transform:none;opacity:1}}
+  @keyframes dipStamp{0%{transform:rotate(-14deg) scale(3);opacity:0}100%{transform:rotate(-14deg) scale(1);opacity:1}}
   #bossbar{
     position:absolute;left:calc(50% + 16px);top:calc(12px + env(safe-area-inset-top));transform:translateX(-50%);
     width:min(44vw,340px);z-index:4;text-align:center;pointer-events:none;color:var(--bone);
@@ -281,6 +312,12 @@
   #invbar{
     position:absolute;right:14px;bottom:calc(214px + env(safe-area-inset-bottom));
     display:flex;flex-direction:column;gap:8px;z-index:3;transform-origin:right bottom;
+  }
+  #invbar.horiz{flex-direction:row}
+  body.desktop.phoneview{background:#070504}
+  body.desktop.phoneview #wrap{
+    width:min(100vw, calc(100vh * .48));margin:0 auto;
+    box-shadow:0 0 0 1px rgba(232,220,192,.08), 0 0 80px rgba(0,0,0,.9);
   }
   #invbar .inv{
     position:relative;width:46px;height:46px;border-radius:50%;padding:0;cursor:pointer;
