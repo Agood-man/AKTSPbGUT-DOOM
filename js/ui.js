@@ -18,10 +18,7 @@ var CTRL_ORIGIN = { stick:"left bottom", fire:"right bottom", swap:"right bottom
 
 function applyLayoutPrefs(){
   document.getElementById("invbar").classList.toggle("horiz", !!SET.invHoriz);
-  document.body.classList.toggle("phoneview", DESKTOP && !SET.pcWide);
   document.getElementById("invdir").textContent = SET.invHoriz ? "УСИЛИТЕЛИ: В РЯД" : "УСИЛИТЕЛИ: СТОЛБИКОМ";
-  document.getElementById("pcview").textContent = SET.pcWide ? "ВИД НА ПК: ШИРОКИЙ" : "ВИД НА ПК: КАК НА ТЕЛЕФОНЕ";
-  document.getElementById("pcview").classList.toggle("gone", !DESKTOP);
   resize();
   xhKey = "";
 }
@@ -155,7 +152,6 @@ function initSettings(){
   onTap(document.getElementById("layoutbtn"), startLayoutEdit);
   onTap(document.getElementById("dipclose"), closeDiploma);
   onTap(document.getElementById("invdir"), () => { SET.invHoriz = !SET.invHoriz; applyLayoutPrefs(); saveSettings(); });
-  onTap(document.getElementById("pcview"), () => { SET.pcWide = !SET.pcWide; applyLayoutPrefs(); saveSettings(); });
   document.addEventListener("mousedown", e => {
     if (!DESKTOP || !playing || paused || document.pointerLockElement === cv) return;
     if (e.target === document.body || e.target === document.documentElement){

@@ -337,14 +337,22 @@ function hitscan(offset, dmg){
   const a = P.a + offset;
   const rx = Math.cos(a), ry = Math.sin(a);
   const wallD = castRay(a);
+  const dirX = Math.cos(P.a), dirY = Math.sin(P.a);
+  const planeX = -dirY*CAM_PLANE, planeY = dirX*CAM_PLANE;
+  const invDet = 1 / (planeX*dirY - dirX*planeY);
+  const aimX = (W/2) * (1 + Math.tan(offset) / CAM_PLANE);
   let best = null, bestT = 1e9;
   for (const e of enemies){
     if (!e.alive) continue;
     const dx = e.x - P.x, dy = e.y - P.y;
     const t = dx*rx + dy*ry;
     if (t <= .05 || t > wallD) continue;
-    const perp = Math.abs(dx*ry - dy*rx);
-    if (perp > HITR(e)) continue;
+    const ty = invDet*(-planeY*dx + planeX*dy);
+    if (ty <= .15) continue;
+    const tx = invDet*(dirY*dx - dirX*dy);
+    const screenX = (W/2) * (1 + tx/ty);
+    const half = Math.abs(H/ty) * (e.scale || KIND[e.type].scale) * .48;
+    if (Math.abs(screenX - aimX) > half) continue;
     if (t < bestT){ bestT = t; best = e; }
   }
   if (!best) return;
@@ -1051,7 +1059,7 @@ for (let i = 0; i < 256; i++){
 
 function render(){
   const dirX = Math.cos(P.a), dirY = Math.sin(P.a);
-  const planeX = -dirY*.66, planeY = dirX*.66;
+  const planeX = -dirY*CAM_PLANE, planeY = dirX*CAM_PLANE;
   const shakeAmp = (P.hp < 45 ? (1 - P.hp/45)*2.2 : 0) + (P.hitT > 0 ? P.hitT*9 : 0) + shake*6;
   const horizon = H*.5 + (shakeAmp ? Math.sin(clock*17)*shakeAmp + (Math.random()-.5)*shakeAmp*.6 : 0);
 

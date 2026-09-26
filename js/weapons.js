@@ -262,7 +262,7 @@ var xhKey = "";
 function drawCrosshair(){
   const cssW = cv.clientWidth || 400;
   const dpr = Math.min(3, window.devicePixelRatio || 1);
-  const key = gun + "|" + cssW + "|" + dpr;
+  const key = gun + "|" + cssW + "|" + dpr + "|" + CAM_PLANE.toFixed(3);
   if (key === xhKey) return;
   xhKey = key;
   const S = 160;
@@ -270,7 +270,7 @@ function drawCrosshair(){
   xh.setTransform(dpr, 0, 0, dpr, 0, 0);
   xh.clearRect(0, 0, S, S);
   const u = 2, arm = 10;
-  const spreadPx = Math.tan(GUNS[gun].spread || 0) / .66 * cssW / 2;
+  const spreadPx = Math.tan(GUNS[gun].spread || 0) / CAM_PLANE * cssW / 2;
   const gap = Math.min(S/2 - arm - 4, Math.max(6, spreadPx));
   const ax = S/2 - u/2, ay = S/2 - u/2;
   const mark = (x, y, w, h) => {
@@ -291,7 +291,7 @@ function drawLastMarkers(horizon){
   if (!playing || enemiesLeft === 0 || enemiesLeft > 3) return;
   const pulse = .45 + .35*Math.sin(clock*7);
   const dirX = Math.cos(P.a), dirY = Math.sin(P.a);
-  const planeX = -dirY*.66, planeY = dirX*.66;
+  const planeX = -dirY*CAM_PLANE, planeY = dirX*CAM_PLANE;
   const invDet = 1/(planeX*dirY - dirX*planeY);
   const size = Math.max(6, W/50);
   ctx.fillStyle = `rgba(214,64,44,${pulse.toFixed(2)})`;

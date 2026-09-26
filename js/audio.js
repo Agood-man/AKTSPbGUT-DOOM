@@ -83,10 +83,12 @@ for (const k in TEX) TEX[k][1] = darken(TEX[k][0], .34);
 
 var cv = document.getElementById("c"), ctx = cv.getContext("2d", {alpha:false});
 var W = 0, H = 0, zbuf = null;
+var CAM_PLANE = .66;
 function resize(){
   const rw = cv.clientWidth, rh = cv.clientHeight;
   W = Math.max(80, Math.min(440, Math.round(rw / 2 * SET.quality)));
   H = Math.round(W * rh / rw);
+  CAM_PLANE = Math.max(.66, W / (2 * H));
   cv.width = W; cv.height = H;
   zbuf = new Float32Array(W);
   ctx.imageSmoothingEnabled = false;
