@@ -225,6 +225,7 @@ var CHAR = {};
 
 function paintChar(key, src){
   const c = CHAR[key];
+  if (typeof spriteDirty === "function"){ spriteDirty(c.sprite); spriteDirty(c.corpse); }
   const g = c.sprite.getContext("2d");
   g.clearRect(0, 0, 64, 64);
   g.imageSmoothingEnabled = false;
@@ -259,6 +260,51 @@ for (const key in CHAR_FILES){
     img.src = path;
   }
 })();
+
+function drawPalPalych(size){
+  const c = document.createElement("canvas"); c.width = c.height = size;
+  const g = c.getContext("2d");
+  const k = size / 64;
+  const R = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x*k, y*k, w*k, h*k); };
+  R(6, 44, 52, 20, "#34383f");
+  R(10, 42, 44, 4, "#3e434b");
+  R(18, 44, 10, 20, "#454b54"); R(36, 44, 10, 20, "#454b54");
+  R(26, 42, 12, 12, "#e8e4da");
+  R(30, 44, 4, 4, "#8e0f09"); R(29, 48, 6, 13, "#a3120b"); R(31, 48, 2, 13, "#c21a10");
+  R(12, 50, 4, 4, "#c9a227"); R(13, 51, 2, 2, "#f0d060");
+  R(25, 36, 14, 7, "#b8845c");
+  R(16, 10, 32, 28, "#d9a27a");
+  R(14, 20, 36, 14, "#d9a27a");
+  R(16, 30, 32, 6, "#c89068");
+  R(16, 8, 32, 3, "#e4b08a");
+  R(18, 10, 28, 2, "#7a7068"); R(20, 12, 24, 1, "#7a7068"); R(22, 14, 18, 1, "#6b6258");
+  R(13, 16, 4, 12, "#6b6258"); R(47, 16, 4, 12, "#6b6258");
+  R(12, 21, 3, 7, "#c89068"); R(49, 21, 3, 7, "#c89068");
+  R(18, 16, 5, 3, "#3a3029"); R(23, 17, 5, 3, "#3a3029"); R(28, 18, 3, 2, "#3a3029");
+  R(41, 16, 5, 3, "#3a3029"); R(36, 17, 5, 3, "#3a3029"); R(33, 18, 3, 2, "#3a3029");
+  R(18, 20, 12, 8, "#111"); R(34, 20, 12, 8, "#111");
+  R(19, 21, 10, 6, "#6e8594"); R(35, 21, 10, 6, "#6e8594");
+  R(30, 22, 4, 2, "#111");
+  R(22, 23, 4, 3, "#ff3020"); R(38, 23, 4, 3, "#ff3020");
+  R(23, 23, 2, 1, "#ffd0c0"); R(39, 23, 2, 1, "#ffd0c0");
+  R(19, 21, 3, 1, "#b7c7d2"); R(35, 21, 3, 1, "#b7c7d2");
+  R(29, 27, 6, 5, "#c48462");
+  R(21, 32, 22, 4, "#3a2c22"); R(19, 33, 4, 3, "#3a2c22"); R(41, 33, 4, 3, "#3a2c22");
+  R(26, 36, 12, 2, "#6a1a12");
+  return c;
+}
+
+(() => {
+  const sprite = document.createElement("canvas"); sprite.width = sprite.height = 64;
+  const corpseCv = document.createElement("canvas"); corpseCv.width = corpseCv.height = 64;
+  CHAR.boss_final = { sprite, corpse:corpseCv, fallback:false };
+  paintChar("boss_final", drawPalPalych(64));
+})();
+var PAL_PORTRAIT = null;
+function palPortraitURL(){
+  if (!PAL_PORTRAIT) PAL_PORTRAIT = drawPalPalych(256).toDataURL();
+  return PAL_PORTRAIT;
+}
 
 function gunItem(color, label){
   const [s,g] = blank();
@@ -298,9 +344,11 @@ var ART = {
   boss_summoner:[CHAR.boss_summoner.sprite, CHAR.boss_summoner.sprite],
   boss_caster:[CHAR.boss_caster.sprite, CHAR.boss_caster.sprite],
   boss_berserk:[CHAR.boss_berserk.sprite, CHAR.boss_berserk.sprite],
+  boss_final:[CHAR.boss_final.sprite, CHAR.boss_final.sprite],
   corpse:{imp:CHAR.imp.corpse, bull:CHAR.bull.corpse, caster:CHAR.caster.corpse,
           boss_tank:CHAR.boss_tank.corpse, boss_summoner:CHAR.boss_summoner.corpse,
-          boss_caster:CHAR.boss_caster.corpse, boss_berserk:CHAR.boss_berserk.corpse},
+          boss_caster:CHAR.boss_caster.corpse, boss_berserk:CHAR.boss_berserk.corpse,
+          boss_final:CHAR.boss_final.corpse},
   bloodSplash:bloodSplash(),
   medkit:medkit(),
   armor:armorItem(),
@@ -328,8 +376,12 @@ var BOSS_TYPES = [
   {id:"caster",   name:"ХИМИЧКА",  hp:1050, speed:1.1, scale:1.7,  dmg:14, tint:"rgba(150,70,210,.32)"},
   {id:"berserk",  name:"ФИЗРУК",   hp:1200, speed:1.2, scale:1.8,  dmg:18, tint:"rgba(210,40,30,.3)"}
 ];
-var isBossLevel = () => level > 0 && level % BOSS_EVERY === 0;
+var FINAL_LEVEL = 150;
+var FINAL_BOSS = {id:"final", name:"ПАЛ ПАЛЫЧ", hp:9000, speed:1.0, scale:2.5, dmg:26, tint:null};
+var isBossLevel = () => level > 0 && (level % BOSS_EVERY === 0 || level === FINAL_LEVEL);
+var isFinalLevel = () => level === FINAL_LEVEL;
 function bossTypeFor(lvl){
+  if (lvl === FINAL_LEVEL) return FINAL_BOSS;
   const n = lvl / BOSS_EVERY;
   return BOSS_TYPES[(n - 1 + (runSeed % BOSS_TYPES.length)) % BOSS_TYPES.length];
 }
@@ -344,7 +396,7 @@ var ramp = (cap, pow) => cap * Math.pow(t150(), pow);
 var dmgBonus = () => level <= 10 ? level*.6 : 6 + 10*Math.pow((depth()-10)/140, .6);
 var rateMul = () => 1 - .28*Math.pow(t150(), .6);
 
-var isSurge = () => level > 0 && level % 5 === 0 && level % 20 !== 0;
+var isSurge = () => level > 0 && level % 5 === 0 && level % 20 !== 0 && level !== 150;
 
 function countRange(){
   if (level <= 3){ const n = Math.round((4 + Math.round(level*1.5)) * .7); return [n, n]; }

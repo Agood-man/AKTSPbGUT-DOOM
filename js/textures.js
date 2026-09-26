@@ -94,6 +94,7 @@ function buildLightMap(dep){
   else if (kind === "lit"){ levelL = .82 + RNG()*.08; pOn = .7; pFl = .17; }
   else { levelL = .74 + RNG()*.1; pOn = .48; pFl = .24; }
   if (biome.id === "boss"){ levelL = .8; pOn = .7; pFl = .3; }
+  if (biome.id === "final"){ levelL = .82; pOn = .85; pFl = .15; }
   const amb = .55;
   const N = MW * MH;
   for (let i = 0; i < N; i++) LMAPB[i] = GRID[i] ? 0 : amb;
@@ -107,12 +108,17 @@ function buildLightMap(dep){
     for (let t = 0; t < limit * 40 && LAMPS.length < limit && pool.length; t++){
       const c = pool[rnd(pool.length)];
       const x = c % MW, y = (c / MW) | 0;
-      let near = false;
-      for (const L of LAMPS) if (Math.hypot(L.x - x, L.y - y) < 4.5){ near = true; break; }
+      let near = false, litNear = 0;
+      for (const L of LAMPS){
+        const dx = Math.abs(L.x - x), dy = Math.abs(L.y - y), d = Math.hypot(dx, dy);
+        if (d < 4.5 || ((dx === 0 || dy === 0) && d < 8)){ near = true; break; }
+        if (d < 9 && L.state === "on") litNear++;
+      }
       if (near) continue;
       const R = 4.2 + RNG()*2, I = .52 + RNG()*.3;
+      const on = pOn * (litNear ? .4 : 1);
       const roll = RNG();
-      const state = roll < pOn ? "on" : roll < pOn + pFl ? "flicker" : "off";
+      const state = roll < on ? "on" : roll < on + pFl + (pOn - on) * .6 ? "flicker" : "off";
       addLamp(x, y, R, I, state, RNG()*4);
     }
   };
@@ -131,12 +137,24 @@ function genBossArena(){
 }
 GENERATORS.boss = genBossArena;
 
+function genFinalArena(){
+  carveRect(4, 4, MW - 5, MH - 5);
+  for (let i = 0; i < 8; i++){
+    const a = (i + .5) / 8 * Math.PI * 2;
+    const x = Math.round(17 + Math.cos(a) * 8) - 1, y = Math.round(17 + Math.sin(a) * 8) - 1;
+    setCell(x, y, 1); setCell(x+1, y, 1); setCell(x, y+1, 1); setCell(x+1, y+1, 1);
+  }
+  return {x: 17.5, y: 29.5};
+}
+GENERATORS.final = genFinalArena;
+
 function generateLevel(depth){
   GRID.fill(1);
   rooms = [];
   RNG = mulberry32((runSeed ^ Math.imul(depth + 1, 0x9E3779B1)) >>> 0);
   biome = depth <= 3 ? {id:"small", name:"АУДИТОРИЯ"} : BIOMES[rnd(BIOMES.length)];
   if (depth % 20 === 0) biome = {id:"boss", name:"ЛОГОВО"};
+  if (depth === 150) biome = {id:"final", name:"КАБИНЕТ ДИРЕКТОРА"};
 
   let spawn = GENERATORS[biome.id]();
   connectAll(spawn);

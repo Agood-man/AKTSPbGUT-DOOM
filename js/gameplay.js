@@ -6,7 +6,8 @@ function saveGame(){
     hp:Math.round(P.hp), armor:Math.round(P.armor),
     bullets:ammo.bullets, shells:ammo.shells, grenades:ammo.grenades,
     guns:unlocked.reduce((m, v, i) => m | (v ? 1 << i : 0), 0),
-    inv:[inv.rage, inv.haste, inv.shield]
+    inv:[inv.rage, inv.haste, inv.shield],
+    time:Math.round(runTime)
   }));
 }
 function loadGame(){
@@ -134,6 +135,35 @@ function updateLight(dt){
 var keys = {};
 
 var bossRef = null, introT = 0, shake = 0, portal = null, portalT = 0;
+var runTime = 0, finalOutro = null, diplomaShown = false;
+var DIPLOMA_KEY = "terplandia3d.diploma";
+
+function showDiploma(){
+  const m = Math.floor(runTime / 60), h = Math.floor(m / 60);
+  document.getElementById("dip_kills").textContent = kills;
+  document.getElementById("dip_time").textContent = h ? `${h} ч ${m % 60} мин` : `${m} мин`;
+  document.getElementById("dip_seed").textContent = seedText();
+  document.getElementById("dip_grade").textContent = cheated ? "ЗАЧТЕНО (С ОТЛАДКОЙ)" : "С ОТЛИЧИЕМ";
+  const d = document.getElementById("diploma");
+  d.classList.toggle("red", !cheated);
+  d.classList.remove("gone", "show");
+  void d.offsetWidth;
+  d.classList.add("show");
+  diplomaShown = true;
+  fireHeld = false; mouseHeld = false;
+  try { document.exitPointerLock?.(); } catch(e){}
+  [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => beep("square", f, .35, .12, f), i * 160));
+  if (!cheated){
+    try { localStorage.setItem(DIPLOMA_KEY, JSON.stringify({seed: runSeed, kills, time: Math.round(runTime)})); } catch(e){}
+  }
+}
+
+function closeDiploma(){
+  document.getElementById("diploma").classList.add("gone");
+  diplomaShown = false;
+  last = performance.now();
+  showBanner("АСПИРАНТУРА", true, "дальше этажи бесконечны · удачи");
+}
 
 function openPortal(e){
   let best = null;
@@ -153,7 +183,8 @@ function openPortal(e){
 
 function spawnBoss(){
   const T = bossTypeFor(level);
-  const hp = Math.round(T.hp * (1 + 1.8 * t150()));
+  const fin = T.id === "final";
+  const hp = fin ? T.hp : Math.round(T.hp * (1 + 1.8 * t150()));
   enemies = [];
   items = [];
   bossRef = {
@@ -162,16 +193,29 @@ function spawnBoss(){
     speed:T.speed * (1 + .2 * t150()), dmg:T.dmg, strafe:1,
     stuck:0, slideT:0, slideDir:1, seen:true, hurtT:0, voiceT:99, breathT:0, seeT:0, sees:false
   };
+  if (fin){
+    bossRef.x = 17.5; bossRef.y = 7.5; bossRef.rad = .6; bossRef.phase = 1;
+    bossRef.speed = T.speed; bossRef.atk = 2.5; bossRef.atk2 = 6;
+  }
   enemies.push(bossRef);
   enemiesLeft = 1;
   const drops = [["bullets", 8.5, 24.5], ["bullets", 26.5, 24.5], ["shells", 8.5, 8.5], ["medkit", 26.5, 8.5]];
   if (unlocked[3]) drops.push(["grenades", 17.5, 17.5]);
+  if (fin){
+    drops.length = 0;
+    drops.push(["bullets", 6.5, 27.5], ["bullets", 28.5, 27.5], ["shells", 6.5, 6.5], ["shells", 28.5, 6.5],
+               ["grenades", 17.5, 22.5], ["medkit", 6.5, 17.5], ["medkit", 28.5, 17.5], ["armor", 17.5, 27.5]);
+  }
   for (const [kind, x, y] of drops) items.push({kind, x, y, t:Math.random()*6});
-  P.x = 17.5; P.y = 26.5; P.a = -Math.PI / 2;
+  P.x = 17.5; P.y = fin ? 29.5 : 26.5; P.a = -Math.PI / 2;
   stat = {fired:0, hit:0, t:0, n:1};
 }
 
 function bossDefeated(e){
+  if (e.kind === "final"){
+    finalOutro = {t:0, x:e.x, y:e.y, next:0};
+    showBanner("ПАЛ ПАЛЫЧ ОТЧИСЛЕН", true, "поздравляем");
+  }
   const drop = (kind, n) => {
     for (let i = 0; i < n; i++){
       const a = Math.random() * 6.283, r = .6 + Math.random() * 1.6;
@@ -193,22 +237,29 @@ function bossDefeated(e){
   shake = Math.max(shake, 1);
 }
 
-function playBossIntro(name){
+function playBossIntro(name, fin){
   const el = document.getElementById("bossintro");
   const img = document.getElementById("bossimg");
-  if (!img.getAttribute("src")) img.src = "assets/ui/boss-intro.jpg";
+  const want = fin ? palPortraitURL() : "assets/ui/boss-intro.jpg";
+  if (img.getAttribute("src") !== want) img.src = want;
   document.getElementById("bossiname").textContent = name;
+  document.getElementById("bosstitle").textContent = fin ? "ФИНАЛЬНЫЙ БОСС" : "БОЙ С БОССОМ";
+  el.classList.toggle("final", !!fin);
   el.classList.remove("gone", "play");
   void el.offsetWidth;
   el.classList.add("play");
-  introT = 2.6;
+  introT = fin ? 3.6 : 2.6;
+  if (fin){
+    setTimeout(() => beep("sawtooth", 36, 2.4, .34, 22), 900);
+    setTimeout(() => { beep("square", 660, .3, .12, 330); beep("square", 990, .3, .1, 495); }, 1500);
+  }
   fireHeld = false; mouseHeld = false;
   setDrone(0);
   beep("sawtooth", 55, 1.6, .32, 30);
   noiseBurst(1.4, .22, 380, .8);
   setTimeout(() => beep("square", 880, .5, .12, 220), 350);
   clearTimeout(introTimer);
-  introTimer = setTimeout(stopBossIntro, 2600);
+  introTimer = setTimeout(stopBossIntro, fin ? 3600 : 2600);
 }
 
 var introTimer = 0;
@@ -338,7 +389,8 @@ function nextLevel(){
     else { const g = freeCell(4); gx = g.x | 0; gy = g.y | 0; }
     items.push({kind:"gun" + n, x:gx + .5, y:gy + .5, t:0});
     LAMPS = LAMPS.filter(L => Math.hypot(L.x - gx, L.y - gy) >= 5);
-    addLamp(gx, gy, 4.5, .85, "on", 0);
+    const gl = addLamp(gx, gy, 4.5, .85, "flicker", 0);
+    if (gl) gl.gun = "gun" + n;
     composeLight();
     gunHint = `НА ЭТАЖЕ: ${GUNS[n].name}`;
     break;
@@ -366,14 +418,18 @@ function nextLevel(){
     }
   }
   stopBossIntro();
-  bossRef = null; portal = null; portalT = 1.6;
+  finalOutro = null;
+  bossRef = null; portal = null; portalT = isFinalLevel() ? 3.4 : 1.6;
   if (isBossLevel()) spawnBoss();
   beep("sine", 300, .5, .12, 600);
   if (C.surge){
     setDrone(0);
     setTimeout(() => { beep("sine", 44, 1.6, .3, 24); noiseBurst(1.2, .18, 260, .8); setDrone(.05); }, 900);
   }
-  if (bossRef){
+  if (bossRef && bossRef.kind === "final"){
+    showBanner(`ФИНАЛЬНЫЙ БОСС · ${bossRef.name}`, true, `УРОВЕНЬ ${level} · ${biome.name}`);
+    playBossIntro(bossRef.name, true);
+  } else if (bossRef){
     showBanner(`БОЙ С БОССОМ · ${bossRef.name}`, true, `УРОВЕНЬ ${level}`);
     playBossIntro(bossRef.name);
   } else {
@@ -402,6 +458,7 @@ function reset(seed){
   unlocked = [true, false, false, false];
   gun = 0; kills = 0; level = 0;
   for (const k in BT){ BT[k] = 0; inv[k] = 0; }
+  runTime = 0;
   buffShownKey = "";
   combo = 0; comboT = 0;
   grenades.length = 0; booms.length = 0;

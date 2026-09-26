@@ -87,10 +87,108 @@ function bossFire(e, ux, uy, ang){
   shots.push({x:e.x + vx*.6, y:e.y + vy*.6, vx:vx*FIREBALL_SPEED*1.1, vy:vy*FIREBALL_SPEED*1.1, t:0});
 }
 
+function bossFireDir(e, vx, vy, mul){
+  shots.push({x:e.x + vx*.8, y:e.y + vy*.8, vx:vx*FIREBALL_SPEED*mul, vy:vy*FIREBALL_SPEED*mul, t:0});
+}
+
+function summonMinions(e, type, n, cap){
+  const alive = enemies.filter(m => m.alive && m.minion).length;
+  n = Math.min(cap - alive, n);
+  const k = KIND[type];
+  for (let i = 0; i < n; i++){
+    const ang = Math.random() * 6.283;
+    let x = e.x + Math.cos(ang)*1.8, y = e.y + Math.sin(ang)*1.8;
+    if (solid(x, y, .34)){ x = e.x; y = e.y; }
+    enemies.push({type, minion:true, x, y, hp:k.hp + curve().hpBonus(type), alive:true,
+      t:Math.random()*10, cd:1, deadT:0, speed:Math.min(k.speed + level*.03, k.speed*1.28),
+      stuck:0, slideT:0, slideDir:1, seen:true, hurtT:0, voiceT:9, breathT:0, seeT:0, sees:false});
+    booms.push({x, y, t:.25});
+  }
+  if (n > 0){ const a = atPos(e.x, e.y); beep("sine", 140, .6, .2*a.vol, 520, a.pan); }
+}
+
+function bossSlam(e, radius, dmg){
+  const a = atPos(e.x, e.y);
+  for (let i = 0; i < 6; i++) booms.push({x:e.x + Math.cos(i*1.047)*1.2, y:e.y + Math.sin(i*1.047)*1.2, t:.05});
+  boomLight = 1; boomX = e.x; boomY = e.y;
+  beep("sawtooth", 44, .7, .32*a.vol, 22, a.pan);
+  noiseBurst(.6, .32*a.vol, 240, .8, a.pan);
+  shake = Math.max(shake, 1);
+  if (Math.hypot(P.x - e.x, P.y - e.y) < radius) damagePlayer(dmg + dmgBonus(), e.x, e.y);
+}
+
+var FINAL_PHASES = ["", "ПАРА", "СЕССИЯ", "ОТЧИСЛЕНИЕ"];
+function finalAI(e, dt, d, ux, uy, mx, my, sees, frac){
+  const phase = frac > .66 ? 1 : frac > .33 ? 2 : 3;
+  if (phase !== e.phase){
+    e.phase = phase; e.guard = 1.4; e.dash = 0;
+    showBanner(`ПАЛ ПАЛЫЧ · ${FINAL_PHASES[phase]}`, true, phase === 2 ? "он начинает злиться" : "последний звонок");
+    for (let i = 0; i < 10; i++) booms.push({x:e.x + Math.cos(i*.628)*1.8, y:e.y + Math.sin(i*.628)*1.8, t:.08});
+    beep("sawtooth", 38, 1.5, .36, 22); noiseBurst(1.1, .32, 300, .8);
+    shake = Math.max(shake, 1.4);
+    for (const L of LAMPS){
+      if (phase === 2 && L.state === "on" && Math.random() < .6) L.state = "flicker";
+      if (phase === 3 && L.state !== "off" && Math.random() < .45){ L.state = "off"; L.val = 0; }
+    }
+    composeLight();
+  }
+  if (e.guard > 0) e.guard -= dt;
+  e.pulse = (e.pulse || 0) - dt;
+  if (e.pulse <= 0){
+    e.pulse = phase === 3 ? .4 : phase === 2 ? .52 : .68;
+    beep("square", 46, .1, .13, 36);
+  }
+  const sp = e.speed * dt * (phase === 3 ? 1.45 : 1);
+  if (e.dash > 0){
+    e.dash -= dt;
+    moveEnemy(e, e.ddx*sp*4.2, e.ddy*sp*4.2);
+    if (e.dash <= 0 || d < 1.8){ e.dash = 0; bossSlam(e, 3.8, 16); }
+  } else {
+    const want = phase === 1 ? 6.5 : 4.5;
+    if (!sees || d > want + 1) moveEnemy(e, mx*sp, my*sp);
+    else if (d < want - 1.5) moveEnemy(e, -ux*sp, -uy*sp);
+    else moveEnemy(e, -uy*sp*.6*e.strafe, ux*sp*.6*e.strafe);
+    if (Math.random() < dt*.25) e.strafe *= -1;
+  }
+  if (d < 2.1 && e.cd <= 0){ e.cd = 1.1 * rateMul(); damagePlayer(e.dmg + dmgBonus(), e.x, e.y); }
+  e.atk -= dt; e.atk2 -= dt;
+  if (phase === 1){
+    if (e.atk <= 0 && sees){ e.atk = 2.3; for (let i = -3; i <= 3; i++) bossFire(e, ux, uy, i * .12); beep("sine", 260, .3, .16, 90); }
+    if (e.atk2 <= 0){ e.atk2 = 9; summonMinions(e, "imp", 3, 6); }
+  } else if (phase === 2){
+    if (e.atk <= 0 && sees){ e.atk = 2.8; for (let i = -2; i <= 2; i++) bossFire(e, ux, uy, i * .18); }
+    if (e.atk2 <= 0 && !e.dash && sees){
+      e.atk2 = 4.5; e.dash = .6; e.ddx = ux; e.ddy = uy;
+      beep("sawtooth", 70, .6, .3, 180);
+    }
+  } else {
+    e.spin = (e.spin || 0) + dt * 2.3;
+    e.spinT = (e.spinT || 0) - dt;
+    if (e.spinT <= 0){
+      e.spinT = .16;
+      for (let k = 0; k < 3; k++){ const ang = e.spin + k * 2.094; bossFireDir(e, Math.cos(ang), Math.sin(ang), .7); }
+    }
+    if (e.atk2 <= 0){ e.atk2 = 11; summonMinions(e, "bull", 2, 4); }
+    e.tp = (e.tp || 0) - dt;
+    if (d < 2.4 && e.tp <= 0){
+      e.tp = 4;
+      booms.push({x:e.x, y:e.y, t:.2});
+      for (let t = 0; t < 80; t++){
+        const x = 5.5 + Math.random()*24, y = 5.5 + Math.random()*24;
+        if (solid(x, y, .8) || Math.hypot(x - P.x, y - P.y) < 6) continue;
+        e.x = x; e.y = y; break;
+      }
+      booms.push({x:e.x, y:e.y, t:.2});
+      beep("sine", 900, .3, .15, 200);
+    }
+  }
+}
+
 function bossAI(e, dt, d, ux, uy, mx, my, sees){
   const sp = e.speed * dt;
   e.atk -= dt;
   const frac = e.hp / e.maxHp;
+  if (e.kind === "final"){ e.atk += dt; finalAI(e, dt, d, ux, uy, mx, my, sees, frac); return; }
   const a = atPos(e.x, e.y);
   if (e.kind === "tank"){
     if (d > 1.8) moveEnemy(e, mx*sp, my*sp);
@@ -210,6 +308,7 @@ function registerKill(){
 
 function damageEnemy(e, dmg){
   if (!e.alive) return;
+  if (e.guard > 0){ e.hurtT = .06; return; }
   e.hp -= dmg;
   e.hurtT = .14;
   if (e.hp > 0){ beep("triangle", e.boss ? 150 : 320, .07, .1); return; }
@@ -390,15 +489,31 @@ function update(dt){
   }
 
   if (shake > 0) shake = Math.max(0, shake - dt*1.6);
+  runTime += dt;
+  if (finalOutro){
+    finalOutro.t += dt;
+    finalOutro.next -= dt;
+    if (finalOutro.next <= 0 && finalOutro.t < 2.2){
+      finalOutro.next = .13;
+      const a = Math.random() * 6.283, r = Math.random() * 2.6;
+      booms.push({x:finalOutro.x + Math.cos(a)*r, y:finalOutro.y + Math.sin(a)*r, t:0});
+      boomLight = 1; boomX = finalOutro.x; boomY = finalOutro.y;
+      shake = Math.max(shake, .9);
+      noiseBurst(.35, .2, 700, .8);
+    }
+    if (finalOutro.t > 2.6){ finalOutro = null; showDiploma(); }
+  }
   const bb = document.getElementById("bossbar");
   if (bossRef && bossRef.alive){
     const pct = Math.max(0, bossRef.hp / bossRef.maxHp);
-    const key = Math.ceil(bossRef.hp);
+    const key = Math.ceil(bossRef.hp) + "|" + (bossRef.phase || 0);
     if (bb.dataset.k !== String(key)){
       bb.dataset.k = key;
       document.getElementById("bossfill").style.width = (pct * 100).toFixed(1) + "%";
-      document.getElementById("bossnum").textContent = `${Math.max(0, key)} / ${bossRef.maxHp}`;
-      document.getElementById("bossname").textContent = bossRef.name;
+      document.getElementById("bossnum").textContent = `${Math.max(0, Math.ceil(bossRef.hp))} / ${bossRef.maxHp}`;
+      document.getElementById("bossname").textContent =
+        bossRef.kind === "final" ? `${bossRef.name} · ${FINAL_PHASES[bossRef.phase || 1]}` : bossRef.name;
+      document.getElementById("bosshp").classList.toggle("final", bossRef.kind === "final");
     }
     bb.classList.remove("gone");
   } else bb.classList.add("gone");
@@ -631,6 +746,14 @@ function update(dt){
     else if (GUN_OF[it.kind] !== undefined){
       const n = GUN_OF[it.kind];
       unlocked[n] = true;
+      const gl = LAMPS.find(L => L.gun === it.kind);
+      if (gl){
+        gl.state = "off"; gl.val = 0; gl.gun = null;
+        composeLight();
+        const a = atPos(gl.x + .5, gl.y + .5);
+        beep("square", 90, .12, .08*a.vol, 40, a.pan);
+        noiseBurst(.1, .06*a.vol, 2600, 1, a.pan);
+      }
       if (wpnSwitch === -1){ wpnSwitch = n; wpnSeq = null; }
       if (n === 1) ammo.shells += 8;
       if (n === 2) ammo.bullets += 30;
@@ -683,6 +806,63 @@ function update(dt){
 }
 
 var SPR = [], sprN = 0, drawn = [];
+
+var SPR_CACHE = new Map(), FALLEN = new Map(), SPR_LEVELS = 48;
+function spriteDirty(img){ if (!SPR_CACHE) return; SPR_CACHE.delete(img); const f = FALLEN.get(img); if (f){ SPR_CACHE.delete(f); FALLEN.delete(img); } }
+
+function fallenOf(img){
+  let c = FALLEN.get(img);
+  if (c) return c;
+  c = document.createElement("canvas"); c.width = c.height = 64;
+  const g = c.getContext("2d");
+  g.imageSmoothingEnabled = false;
+  g.translate(32, 39); g.rotate(Math.PI/2); g.scale(1.02, .62);
+  g.drawImage(img, -32, -32, 64, 64);
+  FALLEN.set(img, c);
+  return c;
+}
+
+function shadedSprite(img, bright, hurt, tint){
+  let m = SPR_CACHE.get(img);
+  if (!m){ m = new Map(); SPR_CACHE.set(img, m); }
+  const bi = bright > 1 ? SPR_LEVELS + Math.min(8, Math.round((bright - 1) * 20))
+                        : Math.max(0, Math.min(SPR_LEVELS, Math.round(bright * SPR_LEVELS)));
+  const key = tint ? `${bi}${hurt ? "h" : ""}|${tint}` : (hurt ? -1 - bi : bi);
+  let c = m.get(key);
+  if (c) return c;
+  const w = img.width || 64, h = img.height || 64;
+  c = document.createElement("canvas"); c.width = w; c.height = h;
+  const g = c.getContext("2d");
+  g.imageSmoothingEnabled = false;
+  g.drawImage(img, 0, 0);
+  const b = bi <= SPR_LEVELS ? bi / SPR_LEVELS : 1 + (bi - SPR_LEVELS) / 20;
+  if (b > 1){
+    g.globalCompositeOperation = "lighter"; g.globalAlpha = Math.min(1, b - 1);
+    g.drawImage(img, 0, 0); g.globalAlpha = 1;
+  } else if (b < 1){
+    g.globalCompositeOperation = "source-atop";
+    g.fillStyle = FOG_BLACK[((1 - b) * 255 + .5) | 0];
+    g.fillRect(0, 0, w, h);
+  }
+  if (tint){ g.globalCompositeOperation = "source-atop"; g.fillStyle = tint; g.fillRect(0, 0, w, h); }
+  if (hurt){ g.globalCompositeOperation = "source-atop"; g.fillStyle = "rgba(255,235,220,.55)"; g.fillRect(0, 0, w, h); }
+  g.globalCompositeOperation = "source-over";
+  m.set(key, c);
+  return c;
+}
+
+function drawSpans(src, from, to, x0, y0, sw, sh, ty){
+  const TW = src.width;
+  let x = from;
+  while (x < to){
+    while (x < to && ty >= zbuf[x]) x++;
+    if (x >= to) break;
+    const s = x;
+    while (x < to && ty < zbuf[x]) x++;
+    const t0 = Math.max(0, (s - x0) * TW / sw), t1 = Math.min(TW, (x - x0) * TW / sw);
+    if (t1 > t0) ctx.drawImage(src, t0, 0, t1 - t0, src.height, x0 + t0*sw/TW, y0, (t1 - t0)*sw/TW, sh);
+  }
+}
 var EYE_STYLE = [];
 for (let i = 0; i < 64; i++) EYE_STYLE.push(`rgba(190,30,20,${(i/63).toFixed(3)})`);
 function eyeVisible(x, w, ty){
@@ -971,7 +1151,7 @@ function render(){
     o.tx = invDet*(dirY*sx - dirX*sy); o.ty = ty;
     o.hurt = false; o.eyes = false; o.dead = false; o.deadT = 0;
     o.deadBlood = false; o.bloodT = 0; o.boom = false; o.boomT = 0;
-    o.emit = false; o.glow = -1; o.glowA = 0; o.tint = null;
+    o.emit = false; o.glow = -1; o.glowA = 0; o.tint = null; o.minB = 0;
     drawn.push(o);
     return o;
   };
@@ -984,7 +1164,7 @@ function render(){
       dead ? ART.corpse[e.art || e.type] : ART[e.art || k.art][(e.t*4|0) % 2],
       dead ? sc * .92 : sc,
       dead ? (.24 + Math.min(.18, e.deadT*.55)) : (e.boss ? .5 - sc/2 : 0));
-    if (o) o.tint = e.tint || null;
+    if (o){ o.tint = e.tint || null; if (e.kind === "final" && !dead) o.minB = .6; }
     if (o){
       o.hurt = !dead && e.hurtT > 0;
       o.eyes = !dead && e.seen;
@@ -1055,14 +1235,7 @@ function render(){
       if (from < to){
         ctx.globalCompositeOperation = "lighter";
         ctx.globalAlpha = o.glowA;
-        let fullyVisible = true;
-        for (let x=from; x<to; x++){ if (o.ty >= zbuf[x]) { fullyVisible = false; break; } }
-        if (fullyVisible) ctx.drawImage(o.img, 0, 0, 64, 64, x0, y0, sw, sh);
-        else for (let x=from; x<to; x++){
-          if (o.ty >= zbuf[x]) continue;
-          const tX = Math.min(63, Math.max(0, ((x - x0) * 64 / sw) | 0));
-          ctx.drawImage(o.img, tX, 0, 1, 64, x, y0, 1, sh);
-        }
+        drawSpans(o.img, from, to, x0, y0, sw, sh, o.ty);
         ctx.globalAlpha = 1;
         ctx.globalCompositeOperation = "source-over";
       }
@@ -1080,10 +1253,17 @@ function render(){
       if (bright < 1 && invG !== 1) bright = Math.pow(bright, invG);
     }
     if (o.emit) bright = Math.max(bright, 1);
+    if (o.minB) bright = Math.max(bright, o.minB);
+    const alpha = o.boom ? Math.max(0, 1 - o.boomT/.45)
+                : o.deadBlood ? Math.max(0, 1 - o.bloodT/1.15) : 1;
+    const falling = o.dead && !o.deadBlood && o.deadT < .42;
+    let src;
+    if (!falling){
+      const base = (o.dead && !o.deadBlood) ? fallenOf(o.img) : o.img;
+      src = shadedSprite(base, bright, o.hurt, o.tint);
+    } else {
     sctx.clearRect(0,0,64,64);
     sctx.save();
-    sctx.globalAlpha = o.boom ? Math.max(0, 1 - o.boomT/.45)
-                     : o.deadBlood ? Math.max(0, 1 - o.bloodT/1.15) : 1;
     if (o.dead && !o.deadBlood){
       const p = Math.min(1, o.deadT / .42);
       const ease = 1 - Math.pow(1-p, 3);
@@ -1123,24 +1303,14 @@ function render(){
       sctx.globalCompositeOperation = "source-over";
     }
     sctx.globalAlpha = 1;
+    src = shade;
+    }
 
     const from = Math.max(0, Math.floor(x0)), to = Math.min(W, Math.ceil(x0+sw));
-    if (from < to){
-      // Fast path: if the whole sprite is in front of the wall depth buffer,
-      // draw it once instead of issuing one drawImage call per screen column.
-      let fullyVisible = true;
-      for (let x=from; x<to; x++){
-        if (o.ty >= zbuf[x]) { fullyVisible = false; break; }
-      }
-      if (fullyVisible){
-        ctx.drawImage(shade, 0, 0, 64, 64, x0, y0, sw, sh);
-      } else {
-        for (let x=from; x<to; x++){
-          if (o.ty >= zbuf[x]) continue;
-          const texX = Math.min(63, Math.max(0, ((x - x0) * 64 / sw) | 0));
-          ctx.drawImage(shade, texX, 0, 1, 64, x, y0, 1, sh);
-        }
-      }
+    if (from < to && alpha > 0){
+      if (alpha < 1) ctx.globalAlpha = alpha;
+      drawSpans(src, from, to, x0, y0, sw, sh, o.ty);
+      if (alpha < 1) ctx.globalAlpha = 1;
     }
 
     if (o.eyes && bright < .4 && o.ty > 2.4 && o.ty < 17){
