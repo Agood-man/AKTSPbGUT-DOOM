@@ -92,7 +92,7 @@ function resize(){
   ctx.imageSmoothingEnabled = false;
   buildVignette();
 }
-addEventListener("resize", resize);
+addEventListener("resize", () => { resize(); if (typeof layoutBossBar === "function") layoutBossBar(); });
 
 function blank(){
   const s = document.createElement("canvas"); s.width = s.height = 64;
@@ -219,7 +219,8 @@ function drawFallbackEnemy(g){
 var ENEMY_IMG = "assets/enemies/enemy.jpg";
 var CHAR_FILES = {
   imp:ENEMY_IMG, bull:ENEMY_IMG, caster:ENEMY_IMG,
-  boss_tank:ENEMY_IMG, boss_summoner:ENEMY_IMG, boss_caster:ENEMY_IMG, boss_berserk:ENEMY_IMG
+  boss_tank:ENEMY_IMG, boss_summoner:ENEMY_IMG, boss_caster:ENEMY_IMG, boss_berserk:ENEMY_IMG,
+  boss_final:"assets/enemies/final-boss.jpg"
 };
 var CHAR = {};
 
@@ -250,12 +251,12 @@ for (const key in CHAR_FILES){
   for (const path in byPath){
     const keys = byPath[path], img = new Image();
     let tries = 0;
-    img.onload = () => { for (const k of keys){ paintChar(k, img); CHAR[k].fallback = false; } };
+    img.onload = () => { for (const k of keys){ paintChar(k, img); CHAR[k].fallback = false; CHAR[k].loaded = true; } };
     img.onerror = () => {
       if (tries++ < 2){ setTimeout(() => { img.src = path + "?r=" + Date.now(); }, 900 * tries); return; }
       const t = document.createElement("canvas"); t.width = t.height = 64;
       drawFallbackEnemy(t.getContext("2d"));
-      for (const k of keys){ paintChar(k, t); CHAR[k].fallback = true; }
+      for (const k of keys){ paintChar(k, k === "boss_final" ? drawPalPalych(64) : t); CHAR[k].fallback = true; }
     };
     img.src = path;
   }
@@ -294,12 +295,7 @@ function drawPalPalych(size){
   return c;
 }
 
-(() => {
-  const sprite = document.createElement("canvas"); sprite.width = sprite.height = 64;
-  const corpseCv = document.createElement("canvas"); corpseCv.width = corpseCv.height = 64;
-  CHAR.boss_final = { sprite, corpse:corpseCv, fallback:false };
-  paintChar("boss_final", drawPalPalych(64));
-})();
+if (!CHAR.boss_final.loaded) paintChar("boss_final", drawPalPalych(64));
 var PAL_PORTRAIT = null;
 function palPortraitURL(){
   if (!PAL_PORTRAIT) PAL_PORTRAIT = drawPalPalych(256).toDataURL();

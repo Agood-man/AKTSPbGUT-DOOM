@@ -240,7 +240,7 @@ function bossDefeated(e){
 function playBossIntro(name, fin){
   const el = document.getElementById("bossintro");
   const img = document.getElementById("bossimg");
-  const want = fin ? palPortraitURL() : "assets/ui/boss-intro.jpg";
+  const want = fin ? (CHAR.boss_final.loaded ? CHAR_FILES.boss_final : palPortraitURL()) : "assets/ui/boss-intro.jpg";
   if (img.getAttribute("src") !== want) img.src = want;
   document.getElementById("bossiname").textContent = name;
   document.getElementById("bosstitle").textContent = fin ? "ФИНАЛЬНЫЙ БОСС" : "БОЙ С БОССОМ";
@@ -427,10 +427,10 @@ function nextLevel(){
     setTimeout(() => { beep("sine", 44, 1.6, .3, 24); noiseBurst(1.2, .18, 260, .8); setDrone(.05); }, 900);
   }
   if (bossRef && bossRef.kind === "final"){
-    showBanner(`ФИНАЛЬНЫЙ БОСС · ${bossRef.name}`, true, `УРОВЕНЬ ${level} · ${biome.name}`);
+    showBanner("ФИНАЛЬНЫЙ БОСС", true, `${bossRef.name} · ${biome.name}`);
     playBossIntro(bossRef.name, true);
   } else if (bossRef){
-    showBanner(`БОЙ С БОССОМ · ${bossRef.name}`, true, `УРОВЕНЬ ${level}`);
+    showBanner("БОЙ С БОССОМ", true, `${bossRef.name} · УРОВЕНЬ ${level}`);
     playBossIntro(bossRef.name);
   } else {
     showBanner((C.surge ? `ПРОРЫВ · УРОВЕНЬ ${level}` : `УРОВЕНЬ ${level}`) + ` · ${biome.name}`,

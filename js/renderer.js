@@ -87,8 +87,14 @@ function bossFire(e, ux, uy, ang){
   shots.push({x:e.x + vx*.6, y:e.y + vy*.6, vx:vx*FIREBALL_SPEED*1.1, vy:vy*FIREBALL_SPEED*1.1, t:0});
 }
 
-function bossFireDir(e, vx, vy, mul){
-  shots.push({x:e.x + vx*.8, y:e.y + vy*.8, vx:vx*FIREBALL_SPEED*mul, vy:vy*FIREBALL_SPEED*mul, t:0});
+function bossFireDir(e, vx, vy, mul, dmg){
+  shots.push({x:e.x + vx*.8, y:e.y + vy*.8, vx:vx*FIREBALL_SPEED*mul, vy:vy*FIREBALL_SPEED*mul, t:0, dmg});
+}
+function finalVolley(e, ux, uy, n, spread, mul){
+  for (let i = -n; i <= n; i++){
+    const a = i * spread, c = Math.cos(a), s = Math.sin(a);
+    bossFireDir(e, ux*c - uy*s, ux*s + uy*c, mul, 13);
+  }
 }
 
 function summonMinions(e, type, n, cap){
@@ -142,7 +148,7 @@ function finalAI(e, dt, d, ux, uy, mx, my, sees, frac){
   if (e.dash > 0){
     e.dash -= dt;
     moveEnemy(e, e.ddx*sp*4.2, e.ddy*sp*4.2);
-    if (e.dash <= 0 || d < 1.8){ e.dash = 0; bossSlam(e, 3.8, 16); }
+    if (e.dash <= 0 || d < 1.8){ e.dash = 0; bossSlam(e, 3.4, 4); }
   } else {
     const want = phase === 1 ? 6.5 : 4.5;
     if (!sees || d > want + 1) moveEnemy(e, mx*sp, my*sp);
@@ -150,25 +156,28 @@ function finalAI(e, dt, d, ux, uy, mx, my, sees, frac){
     else moveEnemy(e, -uy*sp*.6*e.strafe, ux*sp*.6*e.strafe);
     if (Math.random() < dt*.25) e.strafe *= -1;
   }
-  if (d < 2.1 && e.cd <= 0){ e.cd = 1.1 * rateMul(); damagePlayer(e.dmg + dmgBonus(), e.x, e.y); }
-  e.atk -= dt; e.atk2 -= dt;
+  if (d < 2.1 && e.cd <= 0){ e.cd = 1.3 * rateMul(); damagePlayer(18 + dmgBonus()*.5, e.x, e.y); }
+  e.atk -= dt; e.atk2 -= dt; e.atk3 = (e.atk3 || 6) - dt;
+  const busy = shots.length > 22;
   if (phase === 1){
-    if (e.atk <= 0 && sees){ e.atk = 2.3; for (let i = -3; i <= 3; i++) bossFire(e, ux, uy, i * .12); beep("sine", 260, .3, .16, 90); }
-    if (e.atk2 <= 0){ e.atk2 = 9; summonMinions(e, "imp", 3, 6); }
+    if (e.atk <= 0 && sees && !busy){ e.atk = 3.1; finalVolley(e, ux, uy, 2, .24, .8); beep("sine", 260, .3, .16, 90); }
+    if (e.atk2 <= 0){ e.atk2 = 15; summonMinions(e, "imp", 2, 3); }
   } else if (phase === 2){
-    if (e.atk <= 0 && sees){ e.atk = 2.8; for (let i = -2; i <= 2; i++) bossFire(e, ux, uy, i * .18); }
+    if (e.atk <= 0 && sees && !busy){ e.atk = 3.4; finalVolley(e, ux, uy, 1, .28, .85); }
     if (e.atk2 <= 0 && !e.dash && sees){
-      e.atk2 = 4.5; e.dash = .6; e.ddx = ux; e.ddy = uy;
+      e.atk2 = 5.5; e.dash = .6; e.ddx = ux; e.ddy = uy;
       beep("sawtooth", 70, .6, .3, 180);
     }
+    if (e.atk3 <= 0){ e.atk3 = 17; summonMinions(e, "imp", 2, 2); }
   } else {
-    e.spin = (e.spin || 0) + dt * 2.3;
+    e.spin = (e.spin || 0) + dt * 1.6;
+    e.spinCycle = ((e.spinCycle || 0) + dt) % 6;
     e.spinT = (e.spinT || 0) - dt;
-    if (e.spinT <= 0){
-      e.spinT = .16;
-      for (let k = 0; k < 3; k++){ const ang = e.spin + k * 2.094; bossFireDir(e, Math.cos(ang), Math.sin(ang), .7); }
+    if (e.spinCycle < 3.5 && e.spinT <= 0 && !busy){
+      e.spinT = .3;
+      for (let k = 0; k < 2; k++){ const ang = e.spin + k * Math.PI; bossFireDir(e, Math.cos(ang), Math.sin(ang), .6, 12); }
     }
-    if (e.atk2 <= 0){ e.atk2 = 11; summonMinions(e, "bull", 2, 4); }
+    if (e.atk2 <= 0){ e.atk2 = 16; summonMinions(e, "bull", 1, 2); }
     e.tp = (e.tp || 0) - dt;
     if (d < 2.4 && e.tp <= 0){
       e.tp = 4;
@@ -510,12 +519,12 @@ function update(dt){
     if (bb.dataset.k !== String(key)){
       bb.dataset.k = key;
       document.getElementById("bossfill").style.width = (pct * 100).toFixed(1) + "%";
-      document.getElementById("bossnum").textContent = `${Math.max(0, Math.ceil(bossRef.hp))} / ${bossRef.maxHp}`;
-      document.getElementById("bossname").textContent =
-        bossRef.kind === "final" ? `${bossRef.name} · ${FINAL_PHASES[bossRef.phase || 1]}` : bossRef.name;
+      document.getElementById("bossnum").textContent = (bossRef.kind === "final" ? FINAL_PHASES[bossRef.phase || 1] + " · " : "")
+        + `${Math.max(0, Math.ceil(bossRef.hp))} / ${bossRef.maxHp}`;
+      document.getElementById("bossname").textContent = bossRef.name;
       document.getElementById("bosshp").classList.toggle("final", bossRef.kind === "final");
     }
-    bb.classList.remove("gone");
+    if (bb.classList.contains("gone")){ bb.classList.remove("gone"); layoutBossBar(); }
   } else bb.classList.add("gone");
 
   const buffEl = HUD.buff;
@@ -721,7 +730,7 @@ function update(dt){
     const ox = b.x, oy = b.y;
     b.x += b.vx*dt; b.y += b.vy*dt;
     if (segDist(P.x, P.y, ox, oy, b.x, b.y) < PR + .18){
-      b.dead = true; damagePlayer(FIREBALL_DMG + dmgBonus(), b.x, b.y);
+      b.dead = true; damagePlayer(b.dmg || (FIREBALL_DMG + dmgBonus()), b.x, b.y);
     } else if (solid(b.x, b.y, .1) || cell(b.x, b.y)) b.dead = true;
     if (b.t > 6) b.dead = true;
   }

@@ -26,6 +26,23 @@ function applyLayoutPrefs(){
   xhKey = "";
 }
 
+function layoutBossBar(){
+  const bb = document.getElementById("bossbar");
+  const wr = document.getElementById("wrap").getBoundingClientRect();
+  const mm = document.getElementById("minimap").getBoundingClientRect();
+  const pz = document.getElementById("pausebtn").getBoundingClientRect();
+  let left = 8, right = wr.width - 8, top = 12;
+  if (mm.width && mm.top - wr.top < 80 && mm.left - wr.left < wr.width / 2) left = Math.max(left, mm.right - wr.left + 8);
+  if (pz.width && pz.top - wr.top < 80 && pz.left - wr.left > wr.width / 2) right = Math.min(right, pz.left - wr.left - 8);
+  if (right - left < 150){
+    left = 8; right = wr.width - 8;
+    top = Math.max(mm.width ? mm.bottom : 0, pz.width ? pz.bottom : 0) - wr.top + 8;
+  }
+  let w = right - left;
+  if (w > 340){ left += (w - 340) / 2; w = 340; }
+  bb.style.left = left + "px"; bb.style.width = w + "px"; bb.style.top = top + "px"; bb.style.transform = "none";
+}
+
 function applyControls(){
   for (const id of CTRL_IDS){
     const el = document.getElementById(id);
@@ -43,6 +60,7 @@ function applyControls(){
       el.style.transform = scale === 1 ? "" : `scale(${scale})`;
     }
   }
+  layoutBossBar();
 }
 
 var SLIDERS = {
