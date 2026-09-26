@@ -7,7 +7,7 @@ function saveGame(){
     bullets:ammo.bullets, shells:ammo.shells, grenades:ammo.grenades,
     guns:unlocked.reduce((m, v, i) => m | (v ? 1 << i : 0), 0),
     inv:[inv.rage, inv.haste, inv.shield],
-    lives, lifeDrops,
+    lives, lifeDrops, streak:bestStreak, seedCustom,
     time:Math.round(runTime)
   }));
 }
@@ -32,19 +32,23 @@ function getRecord(){
 function saveRecord(){
   if (cheated) return;
   const r = getRecord();
-  if (level > num(r.level,0) || (level === num(r.level,0) && kills > num(r.kills,0)))
-    store.set(REC_KEY, JSON.stringify({level, kills}));
+  const out = {level:num(r.level,0), kills:num(r.kills,0), streak:num(r.streak,0), custom:!!r.custom};
+  if (level > out.level || (level === out.level && kills > out.kills)){
+    out.level = level; out.kills = kills; out.custom = seedCustom;
+  }
+  out.streak = Math.max(out.streak, bestStreak);
+  store.set(REC_KEY, JSON.stringify(out));
 }
 
 var P = {x:2.5, y:2.5, a:0, hp:100, armor:0, hurt:0, pick:0, inv:0, hitDir:0, hitT:0};
 var BUFFS = {
-  rage:  {name:"ЯРОСТЬ",    time:15, color:"#c8321e"},
-  haste: {name:"УСКОРЕНИЕ", time:15, color:"#e0c020"},
-  shield:{name:"ЩИТ",       time:10, color:"#3f9fd0"}
+  rage:  {name:"ЯРОСТЬ",    time:10, color:"#c8321e"},
+  haste: {name:"УСКОРЕНИЕ", time:10, color:"#e0c020"},
+  shield:{name:"ЩИТ",       time:3,  color:"#3f9fd0"}
 };
 var BT = {rage:0, haste:0, shield:0};
 var inv = {rage:0, haste:0, shield:0};
-var INV_MAX = 3, BUFF_CAP = 45;
+var INV_MAX = 3, BUFF_CAP = 25, RAGE_MULT = 1.7, SHIELD_TAKE = .15;
 var buffShownKey = "";
 
 function updateInvUI(){
@@ -75,6 +79,21 @@ var clock = 0;
 var INV_TIME = .45;
 var enemies = [], items = [], shots = [];
 var ammo = {bullets:45, shells:10, grenades:0};
+var AMMO_SOFT = {bullets:250, shells:40, grenades:20};
+function giveAmmo(kind, n){ ammo[kind] += n; return true; }
+function stockFactor(kind){
+  return Math.max(.15, Math.min(1, 1.25 - ammo[kind] / (2 * AMMO_SOFT[kind])));
+}
+function ammoCount(kind, base){
+  const v = base * stockFactor(kind);
+  return Math.floor(v) + (Math.random() < v - Math.floor(v) ? 1 : 0);
+}
+var BUFF_WEIGHTS = {rage:.38, shield:.37, haste:.25};
+function randomBuff(){
+  let r = Math.random();
+  for (const k in BUFF_WEIGHTS){ r -= BUFF_WEIGHTS[k]; if (r <= 0) return k; }
+  return "rage";
+}
 var gun = 0, kills = 0, level = 0, enemiesLeft = 0;
 var playing = false, flash = 0, recoil = 0, cooldown = 0, bobPhase = 0;
 var boomLight = 0, boomX = 0, boomY = 0;
@@ -149,13 +168,80 @@ function lifeChanceFor(e){
 }
 
 function updateLivesUI(){
+  if (lives > 0) rbdSound();
   const el = document.getElementById("lives");
   el.textContent = `♥ ${lives}`;
   el.classList.toggle("gone", !playing || lives <= 0);
 }
 
-function revivePlayer(){
+var reviveT = 0, RBD_SOUNDS = null;
+(() => {
+  const url = ART.life.toDataURL();
+  for (const el of document.querySelectorAll("#revive i")) el.style.backgroundImage = `url(${url})`;
+})();
+function rbdSound(){
+  if (!RBD_SOUNDS){
+    RBD_SOUNDS = ["assets/sounds/rbdsound1.mp3", "assets/sounds/rbdsound2.mp3"].map(src => {
+      const a = new Audio(src); a.preload = "auto"; return a;
+    });
+  }
+  return RBD_SOUNDS;
+}
+
+function startRevive(){
   lives--;
+  P.hp = 1; P.hitT = 0;
+  reviveT = 2.0;
+  fireHeld = false; mouseHeld = false;
+  updateLivesUI();
+  const snd = rbdSound()[Math.random() < .8 ? 0 : 1];
+  try { snd.pause(); snd.currentTime = 0; snd.volume = Math.max(0, Math.min(1, SET.volume)); snd.play().catch(() => {}); } catch(e){}
+  setDrone(0);
+  document.body.classList.add("rbd");
+  const box = document.getElementById("revive");
+  const wr = document.getElementById("wrap").getBoundingClientRect();
+  const badge = document.getElementById("lives").getBoundingClientRect();
+  const fromX = (badge.width ? badge.left + badge.width/2 : wr.left + wr.width/2) - wr.left;
+  const fromY = (badge.height ? badge.top + badge.height/2 : wr.top + wr.height*.8) - wr.top;
+  const size = Math.min(wr.width, wr.height) * .42;
+  const cx = wr.width/2, cy = wr.height*.42;
+  box.style.width = box.style.height = size + "px";
+  box.style.left = (cx - size/2) + "px"; box.style.top = (cy - size/2) + "px";
+  box.classList.remove("gone");
+  const L = box.querySelector(".hl"), R = box.querySelector(".hr");
+  const dx = fromX - cx, dy = fromY - cy;
+  box.getAnimations().forEach(a => a.cancel()); L.getAnimations().forEach(a => a.cancel()); R.getAnimations().forEach(a => a.cancel());
+  box.animate([
+    {transform:`translate(${dx}px,${dy}px) scale(.08)`, opacity:.2},
+    {transform:"translate(0,0) scale(1.08)", opacity:1, offset:.34},
+    {transform:"translate(0,0) scale(1)", offset:.4},
+    {transform:"translate(-5px,0) scale(1)", offset:.42},
+    {transform:"translate(5px,0) scale(1)", offset:.44},
+    {transform:"translate(0,0) scale(1)", offset:.46},
+    {transform:"translate(0,0) scale(1)", opacity:1, offset:.92},
+    {transform:"translate(0,0) scale(1)", opacity:0}
+  ], {duration:2000, easing:"ease-out", fill:"forwards"});
+  const half = (el, dir) => el.animate([
+    {transform:"translate(0,0) rotate(0)", filter:"brightness(1)"},
+    {transform:"translate(0,0) rotate(0)", filter:"brightness(1)", offset:.43},
+    {transform:"translate(0,0) rotate(0)", filter:"brightness(2.4)", offset:.45},
+    {transform:`translate(${dir*7}px,2px) rotate(${dir*6}deg)`, filter:"brightness(1.2)", offset:.5},
+    {transform:`translate(${dir*26}px,${size*1.6}px) rotate(${dir*38}deg)`, filter:"brightness(.8)"}
+  ], {duration:2000, easing:"cubic-bezier(.5,0,.8,.5)", fill:"forwards"});
+  half(L, -1); half(R, 1);
+  setTimeout(() => beep("square", 1400, .08, .12, 700), 880);
+  setTimeout(() => noiseBurst(.18, .22, 4200, 1), 900);
+}
+
+function finishRevive(){
+  reviveT = 0;
+  document.body.classList.remove("rbd");
+  document.getElementById("revive").classList.add("gone");
+  if (playing) setDrone(.05);
+  revivePlayer();
+}
+
+function revivePlayer(){
   P.hp = 75; P.inv = 2.2; P.hitT = 0;
   for (const s of shots) if (Math.hypot(s.x - P.x, s.y - P.y) < 5) s.dead = true;
   for (const e of enemies){
@@ -174,7 +260,7 @@ function revivePlayer(){
   shake = Math.max(shake, 1);
   beep("sine", 330, .8, .2, 990);
   setTimeout(() => beep("sine", 660, .6, .16, 1320), 180);
-  showBanner("ВТОРАЯ ЖИЗНЬ", true, lives > 0 ? `осталось ещё ${lives}` : "это была последняя");
+  showBanner("ВОЗВРАЩЕНИЕ", true, lives > 0 ? `жизней в запасе: ${lives}` : "это была последняя");
   updateLivesUI();
   updateHUD();
 }
@@ -184,7 +270,7 @@ function showDiploma(){
   const m = Math.floor(runTime / 60), h = Math.floor(m / 60);
   document.getElementById("dip_kills").textContent = kills;
   document.getElementById("dip_time").textContent = h ? `${h} ч ${m % 60} мин` : `${m} мин`;
-  document.getElementById("dip_seed").textContent = seedText();
+  document.getElementById("dip_seed").textContent = seedText() + (seedCustom ? " · SEEDCHANGE" : "");
   document.getElementById("dip_grade").textContent = cheated ? "ЗАЧТЕНО (С ОТЛАДКОЙ)" : "С ОТЛИЧИЕМ";
   const d = document.getElementById("diploma");
   d.classList.toggle("red", !cheated);
@@ -226,13 +312,13 @@ function openPortal(e){
 function spawnBoss(){
   const T = bossTypeFor(level);
   const fin = T.id === "final";
-  const hp = fin ? T.hp : Math.round(T.hp * (1 + 1.8 * t150()));
+  const hp = fin ? T.hp : Math.round(T.hp * bossHpMul());
   enemies = [];
   items = [];
   bossRef = {
     type:"boss", boss:true, kind:T.id, name:T.name, tint:T.tint, scale:T.scale, rad:.55, art:"boss_" + T.id,
     x:17.5, y:9.5, hp, maxHp:hp, alive:true, t:0, cd:2, atk:3.5, deadT:0,
-    speed:T.speed * (1 + .2 * t150()), dmg:T.dmg, strafe:1,
+    speed:T.speed * (1 + .3 * t150()), dmg:T.dmg, strafe:1,
     stuck:0, slideT:0, slideDir:1, seen:true, hurtT:0, voiceT:99, breathT:0, seeT:0, sees:false
   };
   if (fin){
@@ -266,11 +352,9 @@ function bossDefeated(e){
       items.push({kind, x, y, t:Math.random()*6});
     }
   };
-  drop("bullets", 6); drop("shells", 4); drop("grenades", 2);
+  drop("bullets", 4); drop("shells", 3); drop("grenades", 2);
   drop("medkit", 2); drop("armor", 1);
-  const bk = Object.keys(BUFFS);
-  drop(bk[(Math.random()*bk.length)|0], 1);
-  drop(bk[(Math.random()*bk.length)|0], 1);
+  drop(randomBuff(), 1);
   if (Math.random() < lifeChanceFor(e)){ drop("life", 1); lifeDrops++; }
   for (const m of enemies) if (m.alive && m.minion){ m.alive = false; m.deadT = 0; }
   showBanner(`${e.name} ПОВЕРЖЕН${e.name.endsWith("А") ? "А" : ""}`, true, "забери награду");
@@ -414,7 +498,7 @@ function nextLevel(){
     enemies.push({
       type, x:p.x, y:p.y, hp:k.hp + C.hpBonus(type), alive:true,
       t:Math.random()*10, cd:Math.random()*1.5 + .5, deadT:0,
-      speed:Math.min(k.speed + level*.03, k.speed*1.28),
+      speed:enemySpeed(k),
       stuck:0, slideT:0, slideDir:1, seen:false, hurtT:0,
       voiceT:2 + Math.random()*5, breathT:0, seeT:0, sees:false
     });
@@ -438,20 +522,20 @@ function nextLevel(){
     gunHint = `НА ЭТАЖЕ: ${GUNS[n].name}`;
     break;
   }
-  if (level >= 4 && Math.random() < .7){
-    const keys = Object.keys(BUFFS), k = keys[Math.floor(Math.random()*keys.length)];
+  if (level >= 5 && Math.random() < .4){
+    const k = randomBuff();
     const b = freeCell(5);
     items.push({kind:k, x:b.x, y:b.y, t:0});
   }
-  if (level >= 8 && unlocked[3]){
+  if (level >= 8 && unlocked[3] && Math.random() < .5 * stockFactor("grenades")){
     const gr = freeCell(4);
     items.push({kind:"grenades", x:gr.x, y:gr.y, t:0});
   }
 
   const drops = [
     ["medkit",  C.medkits],
-    ["bullets", C.bullets],
-    ["shells",  C.shells],
+    ["bullets", ammoCount("bullets", C.bullets)],
+    ["shells",  ammoCount("shells", C.shells)],
     ["armor",   level % 2 === 0 ? 1 : 0]
   ];
   for (const [kind, count] of drops){
@@ -462,6 +546,8 @@ function nextLevel(){
   }
   stopBossIntro();
   finalOutro = null;
+  parts.length = 0;
+  P.slowT = 0;
   bossRef = null; portal = null; portalT = isFinalLevel() ? 3.4 : 1.6;
   if (isBossLevel()) spawnBoss();
   beep("sine", 300, .5, .12, 600);
@@ -492,6 +578,7 @@ function nextLevel(){
   updateHUD();
   updateInvUI();
   updateLivesUI();
+  document.getElementById("seedtag").classList.toggle("gone", !seedCustom);
   saveGame();
 }
 
@@ -502,7 +589,7 @@ function reset(seed){
   unlocked = [true, false, false, false];
   gun = 0; kills = 0; level = 0;
   for (const k in BT){ BT[k] = 0; inv[k] = 0; }
-  runTime = 0; lives = 0; lifeDrops = 0;
+  runTime = 0; lives = 0; lifeDrops = 0; bestStreak = 0;
   buffShownKey = "";
   combo = 0; comboT = 0;
   grenades.length = 0; booms.length = 0;

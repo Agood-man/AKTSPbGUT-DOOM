@@ -395,10 +395,10 @@ var KIND = {
 };
 var BOSS_EVERY = 20;
 var BOSS_TYPES = [
-  {id:"tank",     name:"ВАХТЁРША", hp:1500, speed:.8,  scale:1.95, dmg:24, tint:"rgba(130,85,40,.28)"},
-  {id:"summoner", name:"ЗАВУЧ",    hp:950,  speed:.95, scale:1.7,  dmg:14, tint:"rgba(60,170,70,.3)"},
-  {id:"caster",   name:"ХИМИЧКА",  hp:1050, speed:1.1, scale:1.7,  dmg:14, tint:"rgba(150,70,210,.32)"},
-  {id:"berserk",  name:"ФИЗРУК",   hp:1200, speed:1.2, scale:1.8,  dmg:18, tint:"rgba(210,40,30,.3)"}
+  {id:"tank",     name:"ВАХТЁРША", hp:1700, speed:.85, scale:1.95, dmg:24, tint:"rgba(130,85,40,.28)"},
+  {id:"summoner", name:"ЗАВУЧ",    hp:1100, speed:.95, scale:1.7,  dmg:14, tint:"rgba(60,170,70,.3)"},
+  {id:"caster",   name:"ХИМИЧКА",  hp:1200, speed:1.1, scale:1.7,  dmg:14, tint:"rgba(150,70,210,.32)"},
+  {id:"berserk",  name:"ФИЗРУК",   hp:1500, speed:1.45, scale:1.8, dmg:18, tint:"rgba(210,40,30,.3)"}
 ];
 var FINAL_LEVEL = 150;
 var FINAL_BOSS = {id:"final", name:"ПАЛ ПАЛЫЧ", hp:9000, speed:1.0, scale:2.5, dmg:26, tint:null};
@@ -417,8 +417,15 @@ var depth = () => Math.min(level, DEPTH_CAP);
 var t150 = () => depth()/DEPTH_CAP;
 var ramp = (cap, pow) => cap * Math.pow(t150(), pow);
 
-var dmgBonus = () => level <= 10 ? level*.6 : 6 + 10*Math.pow((depth()-10)/140, .6);
-var rateMul = () => 1 - .28*Math.pow(t150(), .6);
+var endless = () => level > DEPTH_CAP ? 1 + (level - DEPTH_CAP) * .006 : 1;
+var dmgBonus = () => (level <= 10 ? level*.6 : 6 + 12*Math.pow((depth()-10)/140, .7)) * endless();
+var rateMul = () => Math.max(.55, (1 - .35*Math.pow(t150(), .6)) / Math.sqrt(endless()));
+var HP_GROWTH = {imp:4, bull:3.1, caster:3.5};
+var enemyHp = type => Math.round(KIND[type].hp * (1 + HP_GROWTH[type] * Math.pow(t150(), .75)) * endless());
+var enemySpeed = k => k.speed * (1 + .16*Math.min(level, 10)/10 + .22*Math.pow(t150(), .55));
+var shotSpeed = () => FIREBALL_SPEED * (1 + .25*t150());
+var bossHpMul = () => (1 + 3 * t150()) * endless();
+var bossLvl = () => t150();
 
 var isSurge = () => level > 0 && level % 5 === 0 && level % 20 !== 0 && level !== 150;
 
@@ -439,16 +446,16 @@ function enemyCount(){
 var curve = () => ({
   surge: isSurge(),
   count:   enemyCount(),
-  hpBonus: type => Math.floor(ramp(type === "bull" ? 60 : type === "caster" ? 30 : 25, .55)),
+  hpBonus: type => enemyHp(type) - KIND[type].hp,
   bulls:   level >= 2 ? .12 + ramp(.28, .4) : 0,
   casters: level >= 3 ? .08 + ramp(.26, .4) + (isSurge() ? .08 : 0) : 0,
   medkits: depth() < 40 ? Math.min(4, 1 + Math.floor(level/2))
                         : Math.max(2, 4 - Math.floor((depth() - 40)/50)),
-  bullets: Math.min(4, 1 + Math.floor(level/3)),
-  shells:  Math.min(3, 1 + Math.floor(level/4)),
-  bulletAmt: 30 + Math.min(14, Math.floor(depth()/12)),
-  shellAmt:  6 + Math.min(4, Math.floor(depth()/30)),
-  dropChance: .3 + Math.min(.12, depth()*.0008),
+  bullets: Math.min(3, 1 + Math.floor(level/5)),
+  shells:  Math.min(2, 1 + Math.floor(level/8)),
+  bulletAmt: 24 + Math.min(10, Math.floor(depth()/15)),
+  shellAmt:  5 + Math.min(3, Math.floor(depth()/40)),
+  dropChance: .24 + Math.min(.08, depth()*.0006),
   levelHeal: Math.max(6, 15 - Math.floor(depth()/25))
 });
 

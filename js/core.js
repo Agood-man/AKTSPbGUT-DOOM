@@ -54,6 +54,7 @@ var RNG = Math.random;
 var rnd = n => Math.floor(RNG()*n);
 var seedText = () => runSeed.toString(16).toUpperCase().padStart(8, "0");
 var seedName = "";
+var seedCustom = false;
 var seedShow = () => seedName ? `${seedName} (${seedText()})` : seedText();
 
 function parseSeed(str){
@@ -96,7 +97,11 @@ var BIOMES = [
   {id:"caves",  name:"ПЕЩЕРЫ"},
   {id:"arena",  name:"АРЕНА"},
   {id:"blocks", name:"БЛОКИ"},
-  {id:"rings",  name:"КОЛЬЦА"}
+  {id:"rings",  name:"КОЛЬЦА"},
+  {id:"dorm",   name:"ОБЩАГА"},
+  {id:"gym",    name:"СПОРТЗАЛ"},
+  {id:"canteen",name:"СТОЛОВАЯ"},
+  {id:"library",name:"БИБЛИОТЕКА"}
 ];
 var biome = BIOMES[0];
 
@@ -232,6 +237,94 @@ function genRings(){
   return {x: c + .5, y: c + .5};
 }
 
+function genDorm(){
+  const hy = 15 + rnd(4), vx = 15 + rnd(4);
+  carveRect(2, hy, MW-3, hy+1);
+  carveRect(vx, 2, vx+1, MH-3);
+  for (let x = 2; x + 4 < MW-2; x += 5 + rnd(2)){
+    for (const side of [-1, 1]){
+      if (RNG() < .12) continue;
+      const w = 3 + rnd(2), h = 3 + rnd(3);
+      if (x + w - 1 >= vx - 1 && x <= vx + 2) continue;
+      const y0 = side < 0 ? hy - 1 - h : hy + 3;
+      if (y0 < 1 || y0 + h > MH - 2) continue;
+      carveRect(x, y0, x + w - 1, y0 + h - 1);
+      setCell(x + rnd(w), side < 0 ? hy - 1 : hy + 2, 0);
+      rooms.push({x, y:y0, w, h});
+    }
+  }
+  for (let y = 2; y + 4 < MH-2; y += 5 + rnd(2)){
+    for (const side of [-1, 1]){
+      if (RNG() < .12) continue;
+      const w = 3 + rnd(3), h = 3 + rnd(2);
+      if (y + h - 1 >= hy - 1 && y <= hy + 2) continue;
+      const x0 = side < 0 ? vx - 1 - w : vx + 3;
+      if (x0 < 1 || x0 + w > MW - 2) continue;
+      carveRect(x0, y, x0 + w - 1, y + h - 1);
+      setCell(side < 0 ? vx - 1 : vx + 2, y + rnd(h), 0);
+      rooms.push({x:x0, y, w, h});
+    }
+  }
+  return {x: 3.5, y: hy + .5};
+}
+
+function genGym(){
+  const x0 = 3 + rnd(2), y0 = 7 + rnd(2), x1 = MW - 4 - rnd(2), y1 = MH - 4 - rnd(2);
+  carveRect(x0, y0, x1, y1);
+  rooms.push({x:x0, y:y0, w:x1 - x0 + 1, h:y1 - y0 + 1});
+  const step = 4 + rnd(2);
+  for (let y = y0 + 3; y < y1 - 2; y += step)
+    for (let x = x0 + 3; x < x1 - 2; x += step) setCell(x, y, 1);
+  let x = x0;
+  while (x + 4 < x1){
+    const w = 3 + rnd(3);
+    carveRect(x, 2, Math.min(x1, x + w - 1), y0 - 2);
+    setCell(x + rnd(Math.min(w, x1 - x + 1)), y0 - 1, 0);
+    rooms.push({x, y:2, w, h:y0 - 3});
+    x += w + 1;
+  }
+  return {x: (x0 + x1) / 2 + .5, y: y1 - .5};
+}
+
+function genCanteen(){
+  const x0 = 2, y0 = 2, x1 = MW - 3, y1 = MH - 10 - rnd(3);
+  carveRect(x0, y0, x1, y1);
+  rooms.push({x:x0, y:y0, w:x1 - x0 + 1, h:y1 - y0 + 1});
+  for (let y = y0 + 3; y < y1 - 1; y += 3){
+    let x = x0 + 2 + rnd(2);
+    while (x < x1 - 2){
+      const len = 3 + rnd(3);
+      for (let i = 0; i < len && x + i < x1 - 1; i++) setCell(x + i, y, 1);
+      x += len + 2 + rnd(2);
+    }
+  }
+  const ky = y1 + 2;
+  let x = x0;
+  while (x + 3 < x1){
+    const w = 4 + rnd(3);
+    carveRect(x, ky, Math.min(x1, x + w - 1), MH - 3);
+    setCell(x + 1 + rnd(Math.max(1, w - 2)), y1 + 1, 0);
+    rooms.push({x, y:ky, w, h:MH - 2 - ky});
+    x += w + 1;
+  }
+  return {x: x0 + 1.5, y: y0 + 1.5};
+}
+
+function genLibrary(){
+  const x0 = 2, y0 = 2, x1 = MW - 3, y1 = MH - 3;
+  carveRect(x0, y0, x1, y1);
+  rooms.push({x:x0, y:y0, w:x1 - x0 + 1, h:y1 - y0 + 1});
+  const cross = [9 + rnd(3), 20 + rnd(4)];
+  for (let x = x0 + 2; x < x1 - 1; x += 3){
+    for (let y = y0 + 2; y < y1 - 1; y++){
+      if (cross.some(c => Math.abs(y - c) <= 1)) continue;
+      setCell(x, y, 1);
+    }
+    if (RNG() < .5){ const g = y0 + 3 + rnd(y1 - y0 - 6); setCell(x, g, 0); }
+  }
+  return {x: x0 + .5, y: y0 + .5};
+}
+
 function genSmall(){
   const w = 11 + rnd(5), h = 11 + rnd(5);
   const x0 = 1 + rnd(MW - w - 2), y0 = 1 + rnd(MH - h - 2);
@@ -250,7 +343,8 @@ function genSmall(){
 }
 
 var GENERATORS = {small:genSmall, rooms:genRooms, maze:genMaze, caves:genCaves,
-                    arena:genArena, blocks:genBlocks, rings:genRings};
+                    arena:genArena, blocks:genBlocks, rings:genRings,
+                    dorm:genDorm, gym:genGym, canteen:genCanteen, library:genLibrary};
 
 var REG = new Int32Array(MW*MH);
 function connectAll(spawn){

@@ -192,7 +192,8 @@ function loop(t){
   const rawMs = (t - last) || 0;
   fpsTick(rawMs);
   const dt = Math.min(.05, rawMs/1000); last = t;
-  if (introT > 0){ introT -= dt; }
+  if (reviveT > 0){ reviveT -= dt; if (reviveT <= 0) finishRevive(); }
+  else if (introT > 0){ introT -= dt; }
   else if (playing && !paused && !dbgShown && !diplomaShown){
     update(dt);
     autoSave += dt;
@@ -268,7 +269,9 @@ function refreshScreen(){
   const sv = loadGame(), r = getRecord();
   contBtn.classList.toggle("gone", !sv);
   if (sv) contBtn.textContent = `ПРОДОЛЖИТЬ · УР. ${sv.level}`;
-  recLine.textContent = num(r.level,0) ? `Рекорд: уровень ${r.level}, фрагов ${r.kills}` : "";
+  recLine.textContent = num(r.level,0)
+    ? `Рекорд: уровень ${r.level}, фрагов ${r.kills}` + (num(r.streak,0) ? ` · серия ×${r.streak}` : "") + (r.custom ? " · SEEDCHANGE" : "")
+    : "";
 }
 
 function initAudio(){
@@ -311,6 +314,8 @@ function beginRun(sv){
     runTime = num(sv.time, 0);
     lives = Math.min(LIVES_MAX, Math.max(0, num(sv.lives, 0) | 0));
     lifeDrops = Math.max(0, num(sv.lifeDrops, 0) | 0);
+    bestStreak = Math.max(0, num(sv.streak, 0) | 0);
+    seedCustom = !!sv.seedCustom;
     if (Array.isArray(sv.inv)){
       inv.rage = Math.min(INV_MAX, num(sv.inv[0], 0) | 0);
       inv.haste = Math.min(INV_MAX, num(sv.inv[1], 0) | 0);
@@ -322,6 +327,7 @@ function beginRun(sv){
     clearSave();
     const typed = (seedIn.value || "").trim().replace(/^#/, "").toUpperCase();
     seedName = /^[0-9A-F]{1,8}$/.test(typed) ? "" : typed;
+    seedCustom = !!typed;
     reset(parseSeed(typed));
     playing = true;
     saveGame();
@@ -367,6 +373,8 @@ function quitToMenu(){
   playing = false;
   updateInvUI();
   updateLivesUI();
+  reviveT = 0; document.body.classList.remove("rbd"); document.getElementById("revive").classList.add("gone");
+  document.getElementById("seedtag").classList.add("gone");
   bossRef = null; portal = null; stopBossIntro();
   document.getElementById("bossbar").classList.add("gone");
   faceCv.classList.add("gone");
@@ -484,11 +492,31 @@ function dbgSpawn(type){
   enemies.push({
     type, x, y, hp:k.hp + C.hpBonus(type), alive:true,
     t:Math.random()*10, cd:1, deadT:0,
-    speed:Math.min(k.speed + level*.03, k.speed*1.28),
+    speed:enemySpeed(k),
     stuck:0, slideT:0, slideDir:1, seen:false, hurtT:0,
     voiceT:2 + Math.random()*5, breathT:0
   });
   enemiesLeft = enemies.filter(e => e.alive).length;
+  updateHUD(); dbgInfo();
+}
+
+function dbgBoss(id){
+  markCheat();
+  const fin = id === "final";
+  const T = fin ? FINAL_BOSS : BOSS_TYPES.find(b => b.id === id);
+  if (!T) return;
+  let x = P.x + Math.cos(P.a)*5, y = P.y + Math.sin(P.a)*5;
+  if (solid(x, y, .75)){ const f = freeCell(3); x = f.x; y = f.y; }
+  const hp = fin ? T.hp : Math.round(T.hp * bossHpMul());
+  const e = {
+    type:"boss", boss:true, kind:T.id, name:T.name, tint:T.tint, scale:T.scale, rad:fin ? .6 : .55, art:"boss_" + T.id,
+    x, y, hp, maxHp:hp, alive:true, t:0, cd:2, atk:3.5, atk2:6, deadT:0,
+    speed:T.speed * (fin ? 1 : 1 + .3 * t150()), dmg:T.dmg, strafe:1, phase:1,
+    stuck:0, slideT:0, slideDir:1, seen:true, hurtT:0, voiceT:99, breathT:0, seeT:0, sees:false
+  };
+  enemies.push(e);
+  bossRef = e;
+  enemiesLeft = enemies.filter(m => m.alive).length;
   updateHUD(); dbgInfo();
 }
 
@@ -563,6 +591,7 @@ function initDebug(){
   });
   for (const b of document.querySelectorAll(".dbgsp")) onTap(b, () => dbgSpawn(b.dataset.t));
   for (const b of document.querySelectorAll(".dbgit")) onTap(b, () => dbgItem(b.dataset.k));
+  for (const b of document.querySelectorAll(".dbgboss")) onTap(b, () => dbgBoss(b.dataset.b));
   onTap(document.getElementById("dbgfps"), () => {
     fpsOn = !fpsOn;
     document.getElementById("fps").classList.toggle("gone", !fpsOn);
@@ -596,6 +625,8 @@ function gameOver(){
   playing = false;
   updateInvUI();
   updateLivesUI();
+  reviveT = 0; document.body.classList.remove("rbd"); document.getElementById("revive").classList.add("gone");
+  document.getElementById("seedtag").classList.add("gone");
   bossRef = null; portal = null; stopBossIntro();
   document.getElementById("bossbar").classList.add("gone");
   screen.classList.remove("hide");

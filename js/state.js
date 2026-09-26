@@ -102,7 +102,7 @@ function beep(type, f0, dur, vol, f1, pan){
 }
 
 var GUNS = [
-  {name:"ПИСТОЛЕТ", cd:.32, dmg:5, pellets:1, spread:.01,  ammo:null,     snd:[420,.1,.18],
+  {name:"ПИСТОЛЕТ", cd:.36, dmg:5, pellets:1, spread:.01,  ammo:null,     snd:[420,.1,.18],
    falloff:[[8,1],[18,.75]]},
   {name:"ДРОБОВИК", cd:.85, dmg:10,pellets:5, spread:.085, ammo:"shells", snd:[150,.22,.3],
    falloff:[[3.5,1],[6.5,.6],[10,.3],[13,0]]},
