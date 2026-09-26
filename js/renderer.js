@@ -333,6 +333,18 @@ function damageEnemy(e, dmg){
   }
 }
 
+function falloff(g, d){
+  const f = g.falloff;
+  if (!f || d <= f[0][0]) return 1;
+  for (let i = 1; i < f.length; i++){
+    if (d <= f[i][0]){
+      const [d0, m0] = f[i-1], [d1, m1] = f[i];
+      return m0 + (m1 - m0) * (d - d0) / (d1 - d0);
+    }
+  }
+  return f[f.length - 1][1];
+}
+
 function hitscan(offset, dmg){
   const a = P.a + offset;
   const rx = Math.cos(a), ry = Math.sin(a);
@@ -356,8 +368,10 @@ function hitscan(offset, dmg){
     if (t < bestT){ bestT = t; best = e; }
   }
   if (!best) return;
+  const m = falloff(GUNS[gun], bestT);
+  if (m <= 0) return;
   stat.hit++;
-  damageEnemy(best, dmg);
+  damageEnemy(best, dmg * m);
 }
 
 var grenades = [], booms = [];

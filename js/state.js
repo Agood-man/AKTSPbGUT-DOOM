@@ -102,9 +102,12 @@ function beep(type, f0, dur, vol, f1, pan){
 }
 
 var GUNS = [
-  {name:"ПИСТОЛЕТ", cd:.32, dmg:5, pellets:1, spread:.01,  ammo:null,     snd:[420,.1,.18]},
-  {name:"ДРОБОВИК", cd:.85, dmg:10,pellets:5, spread:.085, ammo:"shells", snd:[150,.22,.3]},
-  {name:"ПУЛЕМЁТ",  cd:.115,dmg:3, pellets:1, spread:.055, ammo:"bullets",snd:[520,.06,.12]},
+  {name:"ПИСТОЛЕТ", cd:.32, dmg:5, pellets:1, spread:.01,  ammo:null,     snd:[420,.1,.18],
+   falloff:[[8,1],[18,.75]]},
+  {name:"ДРОБОВИК", cd:.85, dmg:10,pellets:5, spread:.085, ammo:"shells", snd:[150,.22,.3],
+   falloff:[[3.5,1],[6.5,.6],[10,.3],[13,0]]},
+  {name:"ПУЛЕМЁТ",  cd:.115,dmg:3, pellets:1, spread:.055, ammo:"bullets",snd:[520,.06,.12],
+   falloff:[[6,1],[12,.8],[18,.6]]},
   {name:"ГРАНАТОМЁТ", cd:1.0, dmg:0, pellets:0, spread:0, ammo:"grenades", snd:[95,.28,.34], launcher:true}
 ];
 var unlocked = [true, false, false, false];
