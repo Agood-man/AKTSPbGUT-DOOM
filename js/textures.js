@@ -101,7 +101,7 @@ function buildLightMap(dep){
 
   let freeCount = 0;
   for (let i = 0; i < N; i++) if (!GRID[i]) freeCount++;
-  const want = Math.max(3, Math.round(freeCount / 26));
+  const want = Math.min(15, Math.max(4, Math.round(freeCount / 26)));
   const [open8, open4] = openCells();
   LAMPS = [];
   const place = (pool, limit) => {
