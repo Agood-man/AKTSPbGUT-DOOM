@@ -320,11 +320,6 @@
     display:flex;flex-direction:column;gap:8px;z-index:3;transform-origin:right bottom;
   }
   #invbar.horiz{flex-direction:row}
-  body.desktop.phoneview{background:#070504}
-  body.desktop.phoneview #wrap{
-    width:min(100vw, calc(100vh * .48));margin:0 auto;
-    box-shadow:0 0 0 1px rgba(232,220,192,.08), 0 0 80px rgba(0,0,0,.9);
-  }
   #invbar .inv{
     position:relative;width:46px;height:46px;border-radius:50%;padding:0;cursor:pointer;
     background:rgba(0,0,0,.45);border:2px solid rgba(232,220,192,.35);touch-action:manipulation;
