@@ -452,7 +452,7 @@ function damageEnemy(e, dmg){
   registerKill();
   if (e.boss){ bossDefeated(e); return; }
   const dry = ammo.bullets < 12 && ammo.shells < 3;
-  if (dry || Math.random() < curve().dropChance){
+  if (dry || Math.random() < curve().dropChance * (isBossLevel() ? 2 : 1)){
     const wb = .34 * stockFactor("bullets"), ws = .22 * stockFactor("shells"), wm = .44;
     const r = Math.random() * (wb + ws + wm);
     items.push({kind: r < wb ? "bullets" : r < wb + ws ? "shells" : "medkit", x:e.x, y:e.y, t:0});
@@ -506,7 +506,7 @@ function explode(x, y){
   beep("sawtooth", 70, .4, .3, 40);
   noiseBurst(.55, .4, 1400, .7);
   boomLight = 1; boomX = x; boomY = y;
-  const R = 3.1, D = 62 * (BT.rage > 0 ? RAGE_MULT : 1);
+  const R = 3.1, D = 62 * (BT.rage > 0 ? RAGE_MULT : 1) * skillMul();
   for (const e of enemies){
     if (!e.alive) continue;
     const d = Math.hypot(e.x - x, e.y - y);
@@ -528,7 +528,7 @@ function shoot(){
   if (gun === 1) noiseBurst(.3, .35, 2600, 1);
   else if (g.launcher) noiseBurst(.2, .3, 900, 1);
   playFireAnim();
-  const mult = BT.rage > 0 ? RAGE_MULT : 1;
+  const mult = (BT.rage > 0 ? RAGE_MULT : 1) * skillMul();
   if (g.launcher){
     stat.fired++;
     grenades.push({x:P.x + Math.cos(P.a)*.4, y:P.y + Math.sin(P.a)*.4,
@@ -650,6 +650,7 @@ function update(dt){
 
   if (shake > 0) shake = Math.max(0, shake - dt*1.6);
   if (parts.length) updateParts(dt);
+  if (bossRef) supplyTick(dt);
   if (P.slowT > 0) P.slowT -= dt;
   runTime += dt;
   if (finalOutro){
@@ -1272,8 +1273,8 @@ function render(){
     wallX -= Math.floor(wallX);
     let texX = (wallX*64) | 0;
     if ((side === 0 && rdx > 0) || (side === 1 && rdy < 0)) texX = 63 - texX;
-    const fc = side === 0 ? (my*MW + mx - sx) : ((my - sy)*MW + mx);
-    const Lc = levelL * (LMAP[fc] || .8) * flick;
+    const hx = P.x + dist*rdx, hy = P.y + dist*rdy;
+    const Lc = levelL * lightSample(side === 0 ? hx - sx*.5 : hx, side === 1 ? hy - sy*.5 : hy) * flick;
     let fi = -1;
     if (brightMode){
       if (dist > 1.2) fi = (Math.min(.35, dist/60) * 255 + .5) | 0;
@@ -1452,8 +1453,7 @@ function render(){
     let bright;
     if (brightMode) bright = Math.max(.75, 1 - o.ty/40);
     else {
-      const scx = o.x | 0, scy = o.y | 0;
-      const m = (scx >= 0 && scy >= 0 && scx < MW && scy < MH) ? (LMAP[scy*MW + scx] || .8) : .8;
+      const m = lightSample(o.x, o.y);
       const Ls = levelL * m * flick;
       bright = Math.max(.05, (1 - o.ty/(8.2*Ls)) * Ls);
       if (nL && !o.emit) bright = Math.min(1.1, bright + lightAt(o.x, o.y) * .55);

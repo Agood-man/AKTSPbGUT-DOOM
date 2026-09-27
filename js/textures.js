@@ -19,6 +19,29 @@ function themeWalls(depth){
   for (let y=0;y<MH;y++){ GRID[y*MW] = 1; GRID[y*MW + MW-1] = 1; }
 }
 
+function lightSample(x, y){
+  const fx = x - .5, fy = y - .5;
+  const x0 = Math.floor(fx), y0 = Math.floor(fy);
+  const tx = fx - x0, ty = fy - y0;
+  let s = 0, w = 0;
+  for (let j = 0; j < 2; j++){
+    const cy = y0 + j;
+    if (cy < 0 || cy >= MH) continue;
+    const wy = j ? ty : 1 - ty;
+    for (let i = 0; i < 2; i++){
+      const cx = x0 + i;
+      if (cx < 0 || cx >= MW) continue;
+      const c = cy*MW + cx;
+      if (GRID[c]) continue;
+      const wt = (i ? tx : 1 - tx) * wy;
+      s += LMAP[c] * wt; w += wt;
+    }
+  }
+  if (w > 1e-4) return s / w;
+  const c = (y | 0)*MW + (x | 0);
+  return (c >= 0 && c < LMAP.length && LMAP[c]) || .8;
+}
+
 function composeLight(){
   LMAPR.set(LMAPB);
   for (const L of LAMPS){
@@ -70,9 +93,10 @@ function addLamp(x, y, R, I, state, t0){
   const cells = [], w = [];
   while (h < tl){
     const v = lampQ[h++], d = lampDist[v];
-    const f = 1 - d / R;
+    const e = Math.max(Math.hypot((v % MW) - x, ((v / MW) | 0) - y), d * .72);
+    const f = 1 - e / R;
     if (f > 0){ cells.push(v); w.push(Math.pow(f, 1.6)); }
-    if (d + 1 > R) continue;
+    if (d + 1 > R * 1.45) continue;
     const vx = v % MW, vy = (v / MW) | 0;
     if (vx > 0    && !GRID[v-1]  && lampDist[v-1]  < 0){ lampDist[v-1]  = d + 1; lampQ[tl++] = v-1; }
     if (vx < MW-1 && !GRID[v+1]  && lampDist[v+1]  < 0){ lampDist[v+1]  = d + 1; lampQ[tl++] = v+1; }

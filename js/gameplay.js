@@ -7,7 +7,7 @@ function saveGame(){
     bullets:ammo.bullets, shells:ammo.shells, grenades:ammo.grenades,
     guns:unlocked.reduce((m, v, i) => m | (v ? 1 << i : 0), 0),
     inv:[inv.rage, inv.haste, inv.shield],
-    lives, lifeDrops, streak:bestStreak, seedCustom,
+    lives, lifeDrops, streak:bestStreak, seedCustom, skill,
     time:Math.round(runTime)
   }));
 }
@@ -79,11 +79,41 @@ var clock = 0;
 var INV_TIME = .45;
 var enemies = [], items = [], shots = [];
 var ammo = {bullets:45, shells:10, grenades:0};
-var AMMO_SOFT = {bullets:250, shells:40, grenades:20};
+var AMMO_SOFT = {bullets:350, shells:55, grenades:25};
 function giveAmmo(kind, n){ ammo[kind] += n; return true; }
 function stockFactor(kind){
-  return Math.max(.15, Math.min(1, 1.25 - ammo[kind] / (2 * AMMO_SOFT[kind])));
+  if (isBossLevel()) return 1;
+  return Math.max(.25, Math.min(1, 1.25 - ammo[kind] / (2 * AMMO_SOFT[kind])));
 }
+var skill = 0, SKILL_STEP = .1, SKILL_MAX = .8;
+var skillMul = () => 1 + skill;
+var supplyT = 0;
+function neededAmmo(){
+  const need = [["bullets", ammo.bullets / 150], ["shells", ammo.shells / 20]];
+  if (unlocked[3]) need.push(["grenades", ammo.grenades / 8]);
+  need.sort((a, b) => a[1] - b[1]);
+  return need[0][0];
+}
+function supplyTick(dt){
+  if (!bossRef || !bossRef.alive) return;
+  supplyT -= dt;
+  if (supplyT > 0) return;
+  supplyT = bossRef.kind === "final" ? 13 : 18;
+  const onFloor = items.filter(i => !i.dead && i.supply).length;
+  if (onFloor >= 3) return;
+  for (let t = 0; t < 80; t++){
+    const x = 5.5 + Math.random()*24, y = 5.5 + Math.random()*24;
+    if (solid(x, y, .4)) continue;
+    if (Math.hypot(x - bossRef.x, y - bossRef.y) < 5 || Math.hypot(x - P.x, y - P.y) < 2) continue;
+    const kind = neededAmmo();
+    items.push({kind, x, y, t:0, supply:true});
+    booms.push({x, y, t:.3});
+    beep("sine", 660, .25, .12, 990);
+    if (!supplyShown){ supplyShown = true; showBanner("ПОДВОЗ", false, "на арене появляются ящики с патронами"); }
+    return;
+  }
+}
+var supplyShown = false;
 function ammoCount(kind, base){
   const v = base * stockFactor(kind);
   return Math.floor(v) + (Math.random() < v - Math.floor(v) ? 1 : 0);
@@ -148,8 +178,7 @@ function updateLight(dt){
     lightNow += (lightBase - lightNow) * Math.min(1, dt*8);
   }
   if (flash > .05) lightNow = Math.max(lightNow, Math.min(1.15, lightBase + flash*.7));
-  const pc = (P.y|0)*MW + (P.x|0);
-  const target = pc >= 0 && pc < LMAP.length ? LMAP[pc] : .1;
+  const target = lightSample(P.x, P.y);
   playerLight += (target - playerLight) * Math.min(1, dt*3);
 }
 var keys = {};
@@ -175,10 +204,7 @@ function updateLivesUI(){
 }
 
 var reviveT = 0, RBD_SOUNDS = null;
-(() => {
-  const url = ART.life.toDataURL();
-  for (const el of document.querySelectorAll("#revive i")) el.style.backgroundImage = `url(${url})`;
-})();
+
 function rbdSound(){
   if (!RBD_SOUNDS){
     RBD_SOUNDS = ["assets/sounds/rbdsound1.mp3", "assets/sounds/rbdsound2.mp3"].map(src => {
@@ -188,55 +214,175 @@ function rbdSound(){
   return RBD_SOUNDS;
 }
 
+var RBD_LEN = 2.5, rbd = null;
+
 function startRevive(){
   lives--;
   P.hp = 1; P.hitT = 0;
-  reviveT = 2.0;
+  reviveT = RBD_LEN;
   fireHeld = false; mouseHeld = false;
   updateLivesUI();
   const snd = rbdSound()[Math.random() < .8 ? 0 : 1];
   try { snd.pause(); snd.currentTime = 0; snd.volume = Math.max(0, Math.min(1, SET.volume)); snd.play().catch(() => {}); } catch(e){}
   setDrone(0);
   document.body.classList.add("rbd");
-  const box = document.getElementById("revive");
+  const cv2 = document.getElementById("rbdcv");
   const wr = document.getElementById("wrap").getBoundingClientRect();
+  const dpr = Math.min(2, devicePixelRatio || 1);
+  cv2.width = Math.round(wr.width * dpr); cv2.height = Math.round(wr.height * dpr);
+  cv2.classList.remove("gone");
   const badge = document.getElementById("lives").getBoundingClientRect();
-  const fromX = (badge.width ? badge.left + badge.width/2 : wr.left + wr.width/2) - wr.left;
-  const fromY = (badge.height ? badge.top + badge.height/2 : wr.top + wr.height*.8) - wr.top;
-  const size = Math.min(wr.width, wr.height) * .42;
-  const cx = wr.width/2, cy = wr.height*.42;
-  box.style.width = box.style.height = size + "px";
-  box.style.left = (cx - size/2) + "px"; box.style.top = (cy - size/2) + "px";
-  box.classList.remove("gone");
-  const L = box.querySelector(".hl"), R = box.querySelector(".hr");
-  const dx = fromX - cx, dy = fromY - cy;
-  box.getAnimations().forEach(a => a.cancel()); L.getAnimations().forEach(a => a.cancel()); R.getAnimations().forEach(a => a.cancel());
-  box.animate([
-    {transform:`translate(${dx}px,${dy}px) scale(.08)`, opacity:.2},
-    {transform:"translate(0,0) scale(1.08)", opacity:1, offset:.34},
-    {transform:"translate(0,0) scale(1)", offset:.4},
-    {transform:"translate(-5px,0) scale(1)", offset:.42},
-    {transform:"translate(5px,0) scale(1)", offset:.44},
-    {transform:"translate(0,0) scale(1)", offset:.46},
-    {transform:"translate(0,0) scale(1)", opacity:1, offset:.92},
-    {transform:"translate(0,0) scale(1)", opacity:0}
-  ], {duration:2000, easing:"ease-out", fill:"forwards"});
-  const half = (el, dir) => el.animate([
-    {transform:"translate(0,0) rotate(0)", filter:"brightness(1)"},
-    {transform:"translate(0,0) rotate(0)", filter:"brightness(1)", offset:.43},
-    {transform:"translate(0,0) rotate(0)", filter:"brightness(2.4)", offset:.45},
-    {transform:`translate(${dir*7}px,2px) rotate(${dir*6}deg)`, filter:"brightness(1.2)", offset:.5},
-    {transform:`translate(${dir*26}px,${size*1.6}px) rotate(${dir*38}deg)`, filter:"brightness(.8)"}
-  ], {duration:2000, easing:"cubic-bezier(.5,0,.8,.5)", fill:"forwards"});
-  half(L, -1); half(R, 1);
-  setTimeout(() => beep("square", 1400, .08, .12, 700), 880);
-  setTimeout(() => noiseBurst(.18, .22, 4200, 1), 900);
+  const crack = [[32, 19]];
+  for (let i = 1; i < 10; i++) crack.push([32 + (Math.random()*2 - 1) * (i % 2 ? 4.5 : 2.5), 19 + i * 3.3]);
+  crack[crack.length - 1] = [32, 51];
+  const branches = [];
+  for (let i = 2; i < 8; i += 2){
+    const [x, y] = crack[i], dir = Math.random() < .5 ? -1 : 1, len = 4 + Math.random()*6;
+    branches.push({at:i, pts:[[x, y], [x + dir*len*.5, y + 1.5 + Math.random()*2], [x + dir*len, y + 3 + Math.random()*3]]});
+  }
+  rbd = {t:0, dpr, w:wr.width, h:wr.height, crack, branches, shards:null, snapped:false, ticks:0,
+         fromX:(badge.width ? badge.left + badge.width/2 : wr.left + wr.width/2) - wr.left,
+         fromY:(badge.height ? badge.top + badge.height/2 : wr.top + wr.height*.8) - wr.top};
+}
+
+function crackLen(pts){ let L = 0; for (let i = 1; i < pts.length; i++) L += Math.hypot(pts[i][0]-pts[i-1][0], pts[i][1]-pts[i-1][1]); return L; }
+function crackPart(pts, frac){
+  const total = crackLen(pts) * frac, out = [pts[0]];
+  let acc = 0;
+  for (let i = 1; i < pts.length; i++){
+    const seg = Math.hypot(pts[i][0]-pts[i-1][0], pts[i][1]-pts[i-1][1]);
+    if (acc + seg >= total){
+      const k = (total - acc) / seg;
+      out.push([pts[i-1][0] + (pts[i][0]-pts[i-1][0])*k, pts[i-1][1] + (pts[i][1]-pts[i-1][1])*k]);
+      return out;
+    }
+    acc += seg; out.push(pts[i]);
+  }
+  return out;
+}
+
+function drawRevive(dt){
+  const R = rbd; if (!R) return;
+  R.t += dt;
+  const t = R.t, cv2 = document.getElementById("rbdcv"), g = cv2.getContext("2d");
+  const W2 = R.w, H2 = R.h;
+  g.setTransform(R.dpr, 0, 0, R.dpr, 0, 0);
+  g.clearRect(0, 0, W2, H2);
+  g.imageSmoothingEnabled = false;
+  const vig = g.createRadialGradient(W2/2, H2*.42, Math.min(W2, H2)*.15, W2/2, H2*.42, Math.max(W2, H2)*.75);
+  vig.addColorStop(0, "rgba(0,0,0,0)"); vig.addColorStop(1, `rgba(20,0,4,${Math.min(.75, t*1.5)})`);
+  g.fillStyle = vig; g.fillRect(0, 0, W2, H2);
+
+  const S = Math.min(W2, H2) * .46, cx = W2/2, cy = H2*.42;
+  const T_IN = .5, T_SLOW = 1.35, T_SNAP = 1.5;
+  const ease = x => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
+  const back = x => { x = Math.min(1, Math.max(0, x)); const c = 1.7; return 1 + (c+1)*Math.pow(x-1, 3) + c*Math.pow(x-1, 2); };
+  const inK = back(t / T_IN);
+  let hx = R.fromX + (cx - R.fromX) * ease(t / T_IN), hy = R.fromY + (cy - R.fromY) * ease(t / T_IN);
+  let sc = .1 + .9 * inK;
+  if (t > T_IN && t < T_SNAP){
+    const q = (t - T_IN) / (T_SNAP - T_IN);
+    const amp = 1 + q*q*5;
+    hx += (Math.random()*2 - 1) * amp; hy += (Math.random()*2 - 1) * amp;
+    sc *= 1 + q * .06;
+  }
+  const img = ART.life;
+  const to = (u, v) => [hx - S*sc/2 + u * S*sc/64, hy - S*sc/2 + v * S*sc/64];
+
+  let frac = 0;
+  if (t > T_IN) frac = t < T_SLOW ? .4 * Math.pow((t - T_IN) / (T_SLOW - T_IN), 1.6) : Math.min(1, .4 + .6 * (t - T_SLOW) / (T_SNAP - T_SLOW));
+  if (t > T_IN + .1 && t < T_SNAP){
+    R.ticks -= dt;
+    if (R.ticks <= 0){ R.ticks = t < T_SLOW ? .16 + Math.random()*.12 : .03; noiseBurst(.04, .07, 5200 + Math.random()*2000, 1); }
+  }
+
+  if (t < T_SNAP){
+    g.save();
+    g.shadowColor = "rgba(255,40,70,.8)"; g.shadowBlur = 30 * sc;
+    g.drawImage(img, hx - S*sc/2, hy - S*sc/2, S*sc, S*sc);
+    g.restore();
+    if (frac > 0){
+      const part = crackPart(R.crack, frac);
+      const line = (pts, wdt, col) => {
+        g.beginPath();
+        pts.forEach((p, i) => { const [X, Y] = to(p[0], p[1]); if (i) g.lineTo(X, Y); else g.moveTo(X, Y); });
+        g.strokeStyle = col; g.lineWidth = wdt; g.lineJoin = "miter"; g.stroke();
+      };
+      g.save(); g.shadowColor = "#fff"; g.shadowBlur = 14; line(part, Math.max(2, S*sc/64*1.6), "rgba(255,240,240,.95)"); g.restore();
+      line(part, Math.max(1, S*sc/64*.6), "#2a0006");
+      for (const br of R.branches){
+        const need = br.at / (R.crack.length - 1);
+        if (frac < need) continue;
+        const bf = Math.min(1, (frac - need) / .15);
+        line(crackPart(br.pts, bf), Math.max(1, S*sc/64*.7), "rgba(255,230,230,.85)");
+      }
+    }
+  } else {
+    if (!R.snapped){
+      R.snapped = true;
+      R.snapX = hx; R.snapY = hy; R.snapS = S*sc;
+      R.shards = [];
+      const palette = ["#e02846", "#b0142a", "#ff6a80", "#ffd6dc", "#8e0f22"];
+      for (let i = 0; i < 26; i++){
+        const p = R.crack[(Math.random() * R.crack.length) | 0];
+        const a = -Math.PI/2 + (Math.random()*2 - 1) * 1.6;
+        const sp = 180 + Math.random()*420;
+        R.shards.push({u:p[0] + (Math.random()*2-1)*3, v:p[1] + (Math.random()*2-1)*2,
+          vx:Math.cos(a)*sp*(p[0] < 32 ? -1 : 1)*(Math.random() < .5 ? 1 : -.4), vy:Math.sin(a)*sp,
+          rot:Math.random()*6.283, vr:(Math.random()*2-1)*14, size:2 + Math.random()*4.5, col:palette[(Math.random()*palette.length)|0]});
+      }
+      shake = Math.max(shake, .8);
+      beep("sawtooth", 60, .8, .3, 30);
+      noiseBurst(.5, .32, 6400, .8);
+      noiseBurst(.25, .25, 1800, .8);
+      document.getElementById("c").animate([{transform:"scale(1.13)"}, {transform:"scale(1)"}], {duration:420, easing:"cubic-bezier(.2,.8,.3,1)"});
+      document.getElementById("wrap").animate([
+        {transform:"translate(0,0)"}, {transform:"translate(-9px,6px)"}, {transform:"translate(8px,-7px)"},
+        {transform:"translate(-6px,-4px)"}, {transform:"translate(5px,5px)"}, {transform:"translate(-2px,1px)"}, {transform:"translate(0,0)"}
+      ], {duration:420, easing:"linear"});
+    }
+    const k = t - T_SNAP, gr = 1400;
+    const ox = R.snapX - R.snapS/2, oy = R.snapY - R.snapS/2, px = R.snapS/64;
+    const fade = Math.max(0, 1 - k / (RBD_LEN - T_SNAP));
+    const halfPath = (left) => {
+      g.beginPath();
+      g.moveTo(ox + (left ? 0 : 64) * px, oy);
+      R.crack.forEach(p => g.lineTo(ox + p[0]*px, oy + p[1]*px));
+      g.lineTo(ox + R.crack[R.crack.length-1][0]*px, oy + 64*px);
+      g.lineTo(ox + (left ? 0 : 64) * px, oy + 64*px);
+      g.closePath();
+    };
+    for (const left of [true, false]){
+      const dir = left ? -1 : 1;
+      g.save();
+      g.globalAlpha = fade;
+      g.translate(R.snapX + dir * (60*k + 90*k*k), R.snapY + (-120*k + gr*.5*k*k));
+      g.rotate(dir * (1.4*k + .8*k*k));
+      g.translate(-R.snapX, -R.snapY);
+      halfPath(left); g.clip();
+      g.drawImage(img, ox, oy, R.snapS, R.snapS);
+      g.restore();
+    }
+    for (const sh of R.shards){
+      const X = ox + sh.u*px + sh.vx*k, Y = oy + sh.v*px + sh.vy*k + gr*.5*k*k;
+      g.save();
+      g.globalAlpha = fade;
+      g.translate(X, Y); g.rotate(sh.rot + sh.vr*k);
+      g.fillStyle = sh.col;
+      const z = sh.size * px * .8;
+      g.beginPath(); g.moveTo(-z, -z*.6); g.lineTo(z, -z*.2); g.lineTo(-z*.2, z); g.closePath(); g.fill();
+      g.restore();
+    }
+    if (k < .25){ g.fillStyle = `rgba(255,255,255,${.75 * (1 - k/.25)})`; g.fillRect(0, 0, W2, H2); }
+  }
 }
 
 function finishRevive(){
-  reviveT = 0;
+  reviveT = 0; rbd = null;
   document.body.classList.remove("rbd");
-  document.getElementById("revive").classList.add("gone");
+  const cv2 = document.getElementById("rbdcv");
+  cv2.getContext("2d").clearRect(0, 0, cv2.width, cv2.height);
+  cv2.classList.add("gone");
   if (playing) setDrone(.05);
   revivePlayer();
 }
@@ -340,6 +486,10 @@ function spawnBoss(){
 }
 
 function bossDefeated(e){
+  if (skill < SKILL_MAX - 1e-6){
+    skill = Math.min(SKILL_MAX, skill + SKILL_STEP);
+    setTimeout(() => { if (playing) showBanner("ПОВЫШЕНИЕ КВАЛИФИКАЦИИ", true, `урон оружия +${Math.round(skill*100)}%`); }, 2600);
+  }
   if (e.kind === "final"){
     finalOutro = {t:0, x:e.x, y:e.y, next:0};
     showBanner("ПАЛ ПАЛЫЧ ОТЧИСЛЕН", true, "поздравляем");
@@ -549,6 +699,7 @@ function nextLevel(){
   parts.length = 0;
   P.slowT = 0;
   bossRef = null; portal = null; portalT = isFinalLevel() ? 3.4 : 1.6;
+  supplyT = 9; supplyShown = false;
   if (isBossLevel()) spawnBoss();
   beep("sine", 300, .5, .12, 600);
   if (C.surge){
@@ -589,7 +740,7 @@ function reset(seed){
   unlocked = [true, false, false, false];
   gun = 0; kills = 0; level = 0;
   for (const k in BT){ BT[k] = 0; inv[k] = 0; }
-  runTime = 0; lives = 0; lifeDrops = 0; bestStreak = 0;
+  runTime = 0; lives = 0; lifeDrops = 0; bestStreak = 0; skill = 0;
   buffShownKey = "";
   combo = 0; comboT = 0;
   grenades.length = 0; booms.length = 0;

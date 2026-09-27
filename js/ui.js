@@ -192,7 +192,7 @@ function loop(t){
   const rawMs = (t - last) || 0;
   fpsTick(rawMs);
   const dt = Math.min(.05, rawMs/1000); last = t;
-  if (reviveT > 0){ reviveT -= dt; if (reviveT <= 0) finishRevive(); }
+  if (reviveT > 0){ drawRevive(dt); reviveT -= dt; if (reviveT <= 0) finishRevive(); }
   else if (introT > 0){ introT -= dt; }
   else if (playing && !paused && !dbgShown && !diplomaShown){
     update(dt);
@@ -316,6 +316,7 @@ function beginRun(sv){
     lifeDrops = Math.max(0, num(sv.lifeDrops, 0) | 0);
     bestStreak = Math.max(0, num(sv.streak, 0) | 0);
     seedCustom = !!sv.seedCustom;
+    skill = Math.max(0, Math.min(SKILL_MAX, num(sv.skill, 0)));
     if (Array.isArray(sv.inv)){
       inv.rage = Math.min(INV_MAX, num(sv.inv[0], 0) | 0);
       inv.haste = Math.min(INV_MAX, num(sv.inv[1], 0) | 0);
@@ -373,7 +374,7 @@ function quitToMenu(){
   playing = false;
   updateInvUI();
   updateLivesUI();
-  reviveT = 0; document.body.classList.remove("rbd"); document.getElementById("revive").classList.add("gone");
+  reviveT = 0; rbd = null; document.body.classList.remove("rbd"); document.getElementById("rbdcv").classList.add("gone");
   document.getElementById("seedtag").classList.add("gone");
   bossRef = null; portal = null; stopBossIntro();
   document.getElementById("bossbar").classList.add("gone");
@@ -625,7 +626,7 @@ function gameOver(){
   playing = false;
   updateInvUI();
   updateLivesUI();
-  reviveT = 0; document.body.classList.remove("rbd"); document.getElementById("revive").classList.add("gone");
+  reviveT = 0; rbd = null; document.body.classList.remove("rbd"); document.getElementById("rbdcv").classList.add("gone");
   document.getElementById("seedtag").classList.add("gone");
   bossRef = null; portal = null; stopBossIntro();
   document.getElementById("bossbar").classList.add("gone");
