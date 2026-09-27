@@ -172,11 +172,24 @@ function genFinalArena(){
 }
 GENERATORS.final = genFinalArena;
 
+function biomeIndexFor(L){
+  const n = BIOMES.length, hist = [];
+  for (let l = Math.max(4, L - 8); l <= L; l++){
+    const h = mulberry32((runSeed ^ Math.imul(l + 7, 0x27D4EB2D)) >>> 0)();
+    const cand = [];
+    for (let i = 0; i < n; i++) if (i !== hist[hist.length - 1] && i !== hist[hist.length - 2]) cand.push(i);
+    if (!cand.length) for (let i = 0; i < n; i++) cand.push(i);
+    hist.push(cand[Math.floor(h * cand.length)]);
+  }
+  return hist[hist.length - 1];
+}
+
 function generateLevel(depth){
   GRID.fill(1);
   rooms = [];
   RNG = mulberry32((runSeed ^ Math.imul(depth + 1, 0x9E3779B1)) >>> 0);
-  biome = depth <= 3 ? {id:"small", name:"АУДИТОРИЯ"} : BIOMES[rnd(BIOMES.length)];
+  if (depth > 3) rnd(BIOMES.length);
+  biome = depth <= 3 ? {id:"small", name:"АУДИТОРИЯ"} : BIOMES[biomeIndexFor(depth)];
   if (depth % 20 === 0) biome = {id:"boss", name:"ЛОГОВО"};
   if (depth === 150) biome = {id:"final", name:"КАБИНЕТ ДИРЕКТОРА"};
 

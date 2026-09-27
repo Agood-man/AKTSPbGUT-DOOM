@@ -100,7 +100,7 @@ var BIOMES = [
   {id:"rings",  name:"КОЛЬЦА"},
   {id:"dorm",   name:"ОБЩАГА"},
   {id:"gym",    name:"СПОРТЗАЛ"},
-  {id:"canteen",name:"СТОЛОВАЯ"},
+  {id:"heat",   name:"ТЕПЛОТРАССА"},
   {id:"library",name:"БИБЛИОТЕКА"}
 ];
 var biome = BIOMES[0];
@@ -310,6 +310,33 @@ function genCanteen(){
   return {x: x0 + 1.5, y: y0 + 1.5};
 }
 
+function genHeat(){
+  const DX = [1, 0, -1, 0], DY = [0, 1, 0, -1];
+  const sx = 4 + rnd(MW - 8), sy = 4 + rnd(MH - 8);
+  const worms = 4 + rnd(3);
+  for (let w = 0; w < worms; w++){
+    let x = w === 0 ? sx : 3 + rnd(MW - 7), y = w === 0 ? sy : 3 + rnd(MH - 7);
+    let dir = rnd(4), straight = 0;
+    const len = 45 + rnd(35);
+    for (let i = 0; i < len; i++){
+      carveRect(x, y, x + 1, y + 1);
+      straight++;
+      if (straight > 3 && RNG() < .22){ dir = (dir + (RNG() < .5 ? 1 : 3)) % 4; straight = 0; }
+      const nx = x + DX[dir], ny = y + DY[dir];
+      if (nx < 2 || ny < 2 || nx > MW - 4 || ny > MH - 4){ dir = (dir + 2) % 4; straight = 0; continue; }
+      x = nx; y = ny;
+      if (RNG() < .035){
+        const r = 2 + rnd(2);
+        const x0 = Math.max(2, x - r), y0 = Math.max(2, y - r), x1 = Math.min(MW - 3, x + r + 1), y1 = Math.min(MH - 3, y + r + 1);
+        carveRect(x0, y0, x1, y1);
+        rooms.push({x:x0, y:y0, w:x1 - x0 + 1, h:y1 - y0 + 1});
+        if (RNG() < .6) setCell(x0 + ((x1 - x0) >> 1), y0 + ((y1 - y0) >> 1), 1);
+      }
+    }
+  }
+  return {x: sx + 1, y: sy + 1};
+}
+
 function genLibrary(){
   const x0 = 2, y0 = 2, x1 = MW - 3, y1 = MH - 3;
   carveRect(x0, y0, x1, y1);
@@ -344,7 +371,7 @@ function genSmall(){
 
 var GENERATORS = {small:genSmall, rooms:genRooms, maze:genMaze, caves:genCaves,
                     arena:genArena, blocks:genBlocks, rings:genRings,
-                    dorm:genDorm, gym:genGym, canteen:genCanteen, library:genLibrary};
+                    dorm:genDorm, gym:genGym, canteen:genCanteen, library:genLibrary, heat:genHeat};
 
 var REG = new Int32Array(MW*MH);
 function connectAll(spawn){

@@ -7,7 +7,7 @@ function saveGame(){
     bullets:ammo.bullets, shells:ammo.shells, grenades:ammo.grenades,
     guns:unlocked.reduce((m, v, i) => m | (v ? 1 << i : 0), 0),
     inv:[inv.rage, inv.haste, inv.shield],
-    lives, lifeDrops, streak:bestStreak, seedCustom, skill,
+    lives, lifeDrops, streak:bestStreak, seedCustom, skill, bossKills,
     time:Math.round(runTime)
   }));
 }
@@ -85,7 +85,8 @@ function stockFactor(kind){
   if (isBossLevel()) return 1;
   return Math.max(.25, Math.min(1, 1.25 - ammo[kind] / (2 * AMMO_SOFT[kind])));
 }
-var skill = 0, SKILL_STEP = .1, SKILL_MAX = .8;
+var skill = 0, bossKills = 0, SKILL_CAP = 2, SKILL_DECAY = .94;
+var skillFor = n => SKILL_CAP * (1 - Math.pow(SKILL_DECAY, n));
 var skillMul = () => 1 + skill;
 var supplyT = 0;
 function neededAmmo(){
@@ -98,9 +99,10 @@ function supplyTick(dt){
   if (!bossRef || !bossRef.alive) return;
   supplyT -= dt;
   if (supplyT > 0) return;
-  supplyT = bossRef.kind === "final" ? 13 : 18;
+  const fin = bossRef.kind === "final";
+  supplyT = fin ? 10 : 18;
   const onFloor = items.filter(i => !i.dead && i.supply).length;
-  if (onFloor >= 3) return;
+  if (onFloor >= (fin ? 4 : 3)) return;
   for (let t = 0; t < 80; t++){
     const x = 5.5 + Math.random()*24, y = 5.5 + Math.random()*24;
     if (solid(x, y, .4)) continue;
@@ -197,13 +199,39 @@ function lifeChanceFor(e){
 }
 
 function updateLivesUI(){
-  if (lives > 0) rbdSound();
+  if (lives > 0){ rbdSound(); rbdLoad(); }
   const el = document.getElementById("lives");
   el.textContent = `♥ ${lives}`;
   el.classList.toggle("gone", !playing || lives <= 0);
 }
 
 var reviveT = 0, RBD_SOUNDS = null;
+
+var RBD_BUF = [null, null], rbdLoading = false, rbdSrc = null;
+function rbdLoad(){
+  if (rbdLoading || typeof AC === "undefined" || !AC) return;
+  rbdLoading = true;
+  ["assets/sounds/rbdsound1.mp3", "assets/sounds/rbdsound2.mp3"].forEach((u, i) => {
+    fetch(u).then(r => r.arrayBuffer()).then(b => AC.decodeAudioData(b)).then(buf => { RBD_BUF[i] = buf; })
+      .catch(() => { rbdLoading = false; });
+  });
+}
+function rbdPlay(){
+  const i = Math.random() < .8 ? 0 : 1;
+  rbdLoad();
+  if (AC && RBD_BUF[i]){
+    try {
+      if (AC.state === "suspended") AC.resume();
+      if (rbdSrc){ try { rbdSrc.stop(); } catch(e){} }
+      const src = AC.createBufferSource(); src.buffer = RBD_BUF[i];
+      src.connect(typeof masterGain !== "undefined" && masterGain ? masterGain : AC.destination);
+      src.start(); rbdSrc = src;
+      return;
+    } catch(e){}
+  }
+  const snd = rbdSound()[i];
+  try { snd.pause(); snd.currentTime = 0; snd.volume = Math.max(0, Math.min(1, SET.volume)); snd.play().catch(() => {}); } catch(e){}
+}
 
 function rbdSound(){
   if (!RBD_SOUNDS){
@@ -222,8 +250,7 @@ function startRevive(){
   reviveT = RBD_LEN;
   fireHeld = false; mouseHeld = false;
   updateLivesUI();
-  const snd = rbdSound()[Math.random() < .8 ? 0 : 1];
-  try { snd.pause(); snd.currentTime = 0; snd.volume = Math.max(0, Math.min(1, SET.volume)); snd.play().catch(() => {}); } catch(e){}
+  rbdPlay();
   setDrone(0);
   document.body.classList.add("rbd");
   const cv2 = document.getElementById("rbdcv");
@@ -486,10 +513,14 @@ function spawnBoss(){
 }
 
 function bossDefeated(e){
-  if (skill < SKILL_MAX - 1e-6){
-    skill = Math.min(SKILL_MAX, skill + SKILL_STEP);
-    setTimeout(() => { if (playing) showBanner("ПОВЫШЕНИЕ КВАЛИФИКАЦИИ", true, `урон оружия +${Math.round(skill*100)}%`); }, 2600);
-  }
+  bossKills++;
+  const before = skill;
+  skill = skillFor(bossKills);
+  const gain = (skill - before) * 100;
+  setTimeout(() => {
+    if (playing) showBanner("ПОВЫШЕНИЕ КВАЛИФИКАЦИИ", true,
+      `урон оружия +${gain >= 1 ? Math.round(gain) : gain.toFixed(1)}% · всего +${Math.round(skill*100)}%`);
+  }, 2600);
   if (e.kind === "final"){
     finalOutro = {t:0, x:e.x, y:e.y, next:0};
     showBanner("ПАЛ ПАЛЫЧ ОТЧИСЛЕН", true, "поздравляем");
@@ -740,7 +771,7 @@ function reset(seed){
   unlocked = [true, false, false, false];
   gun = 0; kills = 0; level = 0;
   for (const k in BT){ BT[k] = 0; inv[k] = 0; }
-  runTime = 0; lives = 0; lifeDrops = 0; bestStreak = 0; skill = 0;
+  runTime = 0; lives = 0; lifeDrops = 0; bestStreak = 0; skill = 0; bossKills = 0;
   buffShownKey = "";
   combo = 0; comboT = 0;
   grenades.length = 0; booms.length = 0;
@@ -769,7 +800,7 @@ var HUD = {
 };
 
 function updateHUD(){
-  HUD.hp.textContent = Math.max(0, Math.round(P.hp));
+  HUD.hp.textContent = Math.max(0, Math.ceil(P.hp));
   HUD.armor.textContent = Math.round(P.armor);
   HUD.kills.textContent = shortNum(kills);
   HUD.leftValue.textContent = enemiesLeft;

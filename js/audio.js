@@ -401,13 +401,14 @@ var BOSS_TYPES = [
   {id:"berserk",  name:"ФИЗРУК",   hp:1500, speed:1.45, scale:1.8, dmg:18, tint:"rgba(210,40,30,.3)"}
 ];
 var FINAL_LEVEL = 150;
-var FINAL_BOSS = {id:"final", name:"ПАЛ ПАЛЫЧ", hp:9000, speed:1.0, scale:2.5, dmg:26, tint:null};
+var FINAL_BOSS = {id:"final", name:"ПАЛ ПАЛЫЧ", hp:36000, speed:1.0, scale:2.5, dmg:26, tint:null};
 var isBossLevel = () => level > 0 && (level % BOSS_EVERY === 0 || level === FINAL_LEVEL);
 var isFinalLevel = () => level === FINAL_LEVEL;
 function bossTypeFor(lvl){
   if (lvl === FINAL_LEVEL) return FINAL_BOSS;
   const n = lvl / BOSS_EVERY;
-  return BOSS_TYPES[(n - 1 + (runSeed % BOSS_TYPES.length)) % BOSS_TYPES.length];
+  const off = Math.floor(mulberry32((runSeed ^ 0x9E3779B9) >>> 0)() * BOSS_TYPES.length);
+  return BOSS_TYPES[(n - 1 + off) % BOSS_TYPES.length];
 }
 var FIREBALL_DMG = 13, FIREBALL_SPEED = 4.0;
 
@@ -417,14 +418,19 @@ var depth = () => Math.min(level, DEPTH_CAP);
 var t150 = () => depth()/DEPTH_CAP;
 var ramp = (cap, pow) => cap * Math.pow(t150(), pow);
 
-var endless = () => level > DEPTH_CAP ? 1 + (level - DEPTH_CAP) * .006 : 1;
+var ENDLESS_CAP = 1000;
+var endU = () => level > DEPTH_CAP ? (Math.min(level, ENDLESS_CAP) - DEPTH_CAP) / (ENDLESS_CAP - DEPTH_CAP) : 0;
+var endless = () => 1 + 1.5 * endU();
+var endHp = () => 1 + 2.5 * Math.pow(endU(), 1.3);
+var bossEnd = () => Math.exp(1.6 * endU());
 var dmgBonus = () => (level <= 10 ? level*.6 : 6 + 12*Math.pow((depth()-10)/140, .7)) * endless();
-var rateMul = () => Math.max(.55, (1 - .35*Math.pow(t150(), .6)) / Math.sqrt(endless()));
-var HP_GROWTH = {imp:4, bull:3.1, caster:3.5};
-var enemyHp = type => Math.round(KIND[type].hp * (1 + HP_GROWTH[type] * Math.pow(t150(), .75)) * endless());
+var rateMul = () => Math.max(.5, (1 - .35*Math.pow(t150(), .6)) / (1 + .25 * endU()));
+var bossRate = () => Math.max(.8, rateMul());
+var HP_GROWTH = {imp:5, bull:3.86, caster:4.33};
+var enemyHp = type => Math.round(KIND[type].hp * (1 + HP_GROWTH[type] * Math.pow(t150(), .75)) * endHp());
 var enemySpeed = k => k.speed * (1 + .16*Math.min(level, 10)/10 + .22*Math.pow(t150(), .55));
 var shotSpeed = () => FIREBALL_SPEED * (1 + .25*t150());
-var bossHpMul = () => (1 + 3 * t150()) * endless();
+var bossHpMul = () => (1 + 1.6 * t150()) * bossEnd();
 var bossLvl = () => t150();
 
 var isSurge = () => level > 0 && level % 5 === 0 && level % 20 !== 0 && level !== 150;

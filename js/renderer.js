@@ -169,7 +169,7 @@ function tankSlam(e, d, a){
   noiseBurst(.5, .3*a.vol, 260, .8, a.pan);
   shake = Math.max(shake, .8);
   if (d < 3.4) damagePlayer(12 + dmgBonus(), e.x, e.y);
-  const n = 14 + Math.floor(8 * bossLvl()), off = Math.random()*6.283;
+  const n = 12 + Math.floor(6 * bossLvl()), off = Math.random()*6.283;
   for (let i = 0; i < n; i++){
     const ang = off + i / n * 6.283;
     bossFireDir(e, Math.cos(ang), Math.sin(ang), .7);
@@ -234,7 +234,6 @@ function finalAI(e, dt, d, ux, uy, mx, my, sees, frac){
     }
     composeLight();
   }
-  if (e.guard > 0) e.guard -= dt;
   e.pulse = (e.pulse || 0) - dt;
   if (e.pulse <= 0){
     e.pulse = phase === 3 ? .4 : phase === 2 ? .52 : .68;
@@ -275,7 +274,7 @@ function finalAI(e, dt, d, ux, uy, mx, my, sees, frac){
       e.spinT = .16;
       for (let k = 0; k < 3; k++){ const ang = e.spin + k * 2.094; bossFireDir(e, Math.cos(ang), Math.sin(ang), .7); }
     }
-    if (e.atk2 <= 0){ e.atk2 = 11; summonMinions(e, "bull", 2, 4); }
+    if (e.atk2 <= 0){ e.atk2 = 16; summonMinions(e, "bull", 1, 2); }
     e.tp = (e.tp === undefined ? 5 : e.tp) - dt;
     if ((d < 3 && e.tp <= 2.5) || e.tp <= 0){
       e.tp = 6 + Math.random()*2;
@@ -285,102 +284,103 @@ function finalAI(e, dt, d, ux, uy, mx, my, sees, frac){
   }
 }
 
+function fireFan(e, ux, uy, n, spread, mul){
+  for (let i = -n; i <= n; i++){
+    const c = Math.cos(i*spread), sn = Math.sin(i*spread);
+    bossFireDir(e, ux*c - uy*sn, ux*sn + uy*c, mul);
+  }
+}
+
 function bossAI(e, dt, d, ux, uy, mx, my, sees){
   if (e.blink){ blinkStep(e, dt); return; }
   const sp = e.speed * dt;
   e.atk -= dt;
   const frac = e.hp / e.maxHp;
   if (e.kind === "final"){ e.atk += dt; finalAI(e, dt, d, ux, uy, mx, my, sees, frac); return; }
-  const a = atPos(e.x, e.y);
+  const a = atPos(e.x, e.y), L = bossLvl();
   if (e.kind === "tank"){
-    e.atk2 = (e.atk2 === undefined ? 5 : e.atk2) - dt;
+    e.atk2 = (e.atk2 === undefined ? 6 : e.atk2) - dt;
     if (e.dash > 0){
       e.dash -= dt;
-      moveEnemy(e, e.ddx*sp*4.5, e.ddy*sp*4.5);
-      if (e.dash <= 0 || d < 1.9){ e.dash = 0; e.atk = Math.max(e.atk, 2); tankSlam(e, d, a); }
+      moveEnemy(e, e.ddx*sp*4.2, e.ddy*sp*4.2);
+      if (e.dash <= 0 || d < 1.9){ e.dash = 0; e.atk = Math.max(e.atk, 2.5); tankSlam(e, d, a); }
     } else {
       if (d > 1.8) moveEnemy(e, mx*sp, my*sp);
-      else if (e.cd <= 0){ e.cd = 1.3 * rateMul(); damagePlayer(e.dmg + dmgBonus()*1.3, e.x, e.y); }
-      if (e.atk <= 0 && d < 9){ e.atk = 4.2 * rateMul(); tankSlam(e, d, a); }
-      if (e.atk2 <= 0 && sees && d > 3 && d < 11){
-        e.atk2 = 6.5 * rateMul(); e.dash = .75; e.ddx = ux; e.ddy = uy;
+      else if (e.cd <= 0){ e.cd = 1.4 * bossRate(); damagePlayer(e.dmg + dmgBonus(), e.x, e.y); }
+      if (e.atk <= 0 && d < 8){ e.atk = 5 * bossRate(); tankSlam(e, d, a); }
+      if (e.atk2 <= 0 && sees && d > 3.5 && d < 10){
+        e.atk2 = 8 * bossRate(); e.dash = .7; e.ddx = ux; e.ddy = uy;
         beep("sawtooth", 60, .7, .3*a.vol, 150, a.pan);
       }
     }
   } else if (e.kind === "summoner"){
     const want = 6;
     if (!sees || d > want + 1) moveEnemy(e, mx*sp, my*sp);
-    else if (d < want - 1) moveEnemy(e, -ux*sp, -uy*sp);
+    else if (d < want - 1 && !solid(e.x - ux*.9, e.y - uy*.9, (e.rad || .5))) moveEnemy(e, -ux*sp, -uy*sp);
     if (e.atk <= 0){
-      e.atk = 7 * rateMul();
+      e.atk = 8 * bossRate();
       const alive = enemies.filter(m => m.alive && m.minion).length;
-      const n = Math.min(5 + Math.floor(3 * bossLvl()) - alive, 2 + Math.floor(2 * bossLvl()));
-      const k = KIND.imp;
-      for (let i = 0; i < n; i++){
-        const ang = Math.random() * 6.283;
-        let x = e.x + Math.cos(ang)*1.4, y = e.y + Math.sin(ang)*1.4;
-        if (solid(x, y, .34)){ x = e.x; y = e.y; }
-        enemies.push({type:"imp", minion:true, x, y, hp:k.hp + curve().hpBonus("imp"), alive:true,
-          t:Math.random()*10, cd:1, deadT:0, speed:enemySpeed(k),
-          stuck:0, slideT:0, slideDir:1, seen:true, hurtT:0, voiceT:9, breathT:0, seeT:0, sees:false});
-        booms.push({x, y, t:.25});
-      }
-      if (n > 0){ beep("sine", 140, .6, .2*a.vol, 520, a.pan); noiseBurst(.4, .15*a.vol, 900, .8, a.pan); }
+      const n = Math.min(3 + Math.floor(2 * L) - alive, 2);
+      if (n > 0) summonMinions(e, "imp", n, 3 + Math.floor(2 * L));
     }
-    if (e.cd <= 0 && sees){ e.cd = 1.6 * rateMul(); bossFire(e, ux, uy, 0); beep("sine", 240, .2, .12, 110); }
+    if (e.cd <= 0 && sees){ e.cd = 2 * bossRate(); bossFire(e, ux, uy, 0); beep("sine", 240, .2, .12, 110); }
   } else if (e.kind === "caster"){
-    const want = 5.5;
-    let wx = -uy * e.strafe, wy = ux * e.strafe;
+    const want = 6;
+    let wx = -uy * e.strafe * .8, wy = ux * e.strafe * .8;
     if (!sees || d > want + 1){ wx += mx*1.5; wy += my*1.5; }
-    else if (d < want - 1){ wx -= ux; wy -= uy; }
+    else if (d < want - 1.5 && !solid(e.x - ux*.9, e.y - uy*.9, (e.rad || .5))){ wx -= ux; wy -= uy; }
     const l = Math.hypot(wx, wy) || 1;
-    moveEnemy(e, wx/l*sp, wy/l*sp);
-    if (Math.random() < dt*.3) e.strafe *= -1;
-    if (e.cd <= 0 && sees){
-      e.cd = 1.9 * rateMul();
-      const n = 2 + Math.floor(2 * bossLvl());
-      for (let i = -n; i <= n; i++) bossFire(e, ux, uy, i * .15);
-      beep("sine", 300, .3, .16, 90);
+    if (!(e.charge > 0)) moveEnemy(e, wx/l*sp, wy/l*sp);
+    if (Math.random() < dt*.25) e.strafe *= -1;
+    if (e.charge > 0){
+      e.charge -= dt;
+      if (e.charge <= 0){
+        fireFan(e, ux, uy, L >= .5 ? 2 : 1, .26, .8);
+        beep("sine", 300, .3, .16, 90);
+      }
+    } else if (e.cd <= 0 && sees){
+      e.cd = 3.2 * bossRate(); e.charge = .7;
+      beep("sine", 420, .6, .12*a.vol, 1500, a.pan);
     }
-    if (d < 2.6 && e.atk <= 0){
-      e.atk = 3;
+    if (d < 2.2 && e.atk <= 0){
+      e.atk = 6;
       const f = blinkTarget(e, 5, 9);
       if (f) bossBlink(e, f.x, f.y);
     }
   } else {
-    const rage = 1 + (1 - frac) * 1.1;
+    const rage = 1 + (1 - frac) * .8;
     e.atk2 = (e.atk2 === undefined ? 4 : e.atk2) - dt;
-    e.atk3 = (e.atk3 === undefined ? 6 : e.atk3) - dt;
+    e.atk3 = (e.atk3 === undefined ? 8 : e.atk3) - dt;
     e.atk4 = (e.atk4 === undefined ? 3 : e.atk4) - dt;
-    if (e.atk3 <= 0 && sees && d < 10){
-      e.atk3 = 9 * rateMul();
-      P.slowT = 1.6;
+    if (e.atk3 <= 0 && sees && d < 9){
+      e.atk3 = 12 * bossRate();
+      P.slowT = 1.2;
       showBanner("СВИСТОК!", true, "ноги ватные");
       beep("sine", 2600, .5, .22*a.vol, 3100, a.pan);
       setTimeout(() => beep("sine", 2600, .35, .18*a.vol, 3000, a.pan), 550);
     }
     if (e.enraged && e.atk4 <= 0 && sees && d > 3){
-      e.atk4 = 3.5 * rateMul();
-      for (let i = -1; i <= 1; i++){
-        const c = Math.cos(i*.2), s = Math.sin(i*.2);
-        shots.push({x:e.x + ux*.8, y:e.y + uy*.8, vx:(ux*c - uy*s)*shotSpeed()*.6, vy:(ux*s + uy*c)*shotSpeed()*.6,
-                    t:0, big:true, dmg:18 + dmgBonus()*.6});
+      e.atk4 = 4.5 * bossRate();
+      for (const i of [-1, 1]){
+        const c = Math.cos(i*.16), sn = Math.sin(i*.16);
+        shots.push({x:e.x + ux*.8, y:e.y + uy*.8, vx:(ux*c - uy*sn)*shotSpeed()*.6, vy:(ux*sn + uy*c)*shotSpeed()*.6,
+                    t:0, big:true, dmg:14 + dmgBonus()*.5});
       }
       beep("square", 110, .25, .2*a.vol, 70, a.pan);
     }
     if (e.dash > 0){
       e.dash -= dt;
-      moveEnemy(e, e.ddx*sp*3.6, e.ddy*sp*3.6);
-      if (d < 1.7){ e.dash = 0; e.chain = 0; if (e.cd <= 0){ e.cd = .6; damagePlayer(e.dmg + dmgBonus(), e.x, e.y); } }
+      moveEnemy(e, e.ddx*sp*3.4, e.ddy*sp*3.4);
+      if (d < 1.7){ e.dash = 0; e.chain = 0; if (e.cd <= 0){ e.cd = .7; damagePlayer(e.dmg + dmgBonus(), e.x, e.y); } }
       else if (e.dash <= 0 && e.chain > 0){
-        e.chain--; e.dash = .55; e.ddx = ux; e.ddy = uy;
+        e.chain--; e.dash = .5; e.ddx = ux; e.ddy = uy;
         beep("sawtooth", 110, .35, .22*a.vol, 240, a.pan);
       }
     } else {
       if (d > 1.6) moveEnemy(e, mx*sp*rage, my*sp*rage);
-      else if (e.cd <= 0){ e.cd = .95 * rateMul() / rage; damagePlayer(e.dmg + dmgBonus(), e.x, e.y); }
+      else if (e.cd <= 0){ e.cd = 1.05 * bossRate() / rage; damagePlayer(e.dmg + dmgBonus(), e.x, e.y); }
       if (e.atk2 <= 0 && sees && d > 4 && d < 12){
-        e.atk2 = 5 * rateMul() / rage; e.dash = .7; e.ddx = ux; e.ddy = uy; e.chain = frac < .5 ? 2 : 1;
+        e.atk2 = 5.5 * bossRate() / rage; e.dash = .65; e.ddx = ux; e.ddy = uy; e.chain = e.enraged ? 1 : 0;
         beep("sawtooth", 90, .5, .25*a.vol, 200, a.pan);
       }
     }
@@ -390,6 +390,12 @@ function bossAI(e, dt, d, ux, uy, mx, my, sees){
       beep("sawtooth", 70, 1, .3, 140);
     }
   }
+}
+
+function clearPath(e, d, ux, uy){
+  const r = (e.rad || ER) * .9, lim = Math.min(d - .3, 3);
+  for (let s = .3; s < lim; s += .3) if (solid(e.x + ux*s, e.y + uy*s, r)) return false;
+  return true;
 }
 
 function moveEnemy(e, dx, dy){
@@ -610,7 +616,8 @@ function update(dt){
   if (keys.arrowright) P.a += 2.2*dt;
   fw += touch.fw; st += touch.st;
 
-  const sp = 2.7 * (BT.haste > 0 ? 1.28 : 1) * (P.slowT > 0 ? .55 : 1) * dt;
+  const sprint = gun === 0 && wpnSwitch === -1 ? 1.04 : 1;
+  const sp = 2.7 * (BT.haste > 0 ? 1.28 : 1) * (P.slowT > 0 ? .7 : 1) * sprint * dt;
   if (fw || st){
     const len = Math.hypot(fw, st) || 1;
     const f = fw/len, s = st/len;
@@ -674,7 +681,7 @@ function update(dt){
       bb.dataset.k = key;
       document.getElementById("bossfill").style.width = (pct * 100).toFixed(1) + "%";
       document.getElementById("bossnum").textContent = (bossRef.kind === "final" ? FINAL_PHASES[bossRef.phase || 1] + " · " : "")
-        + `${Math.max(0, Math.ceil(bossRef.hp))} / ${bossRef.maxHp}`;
+        + `${shortNum(Math.max(0, Math.ceil(bossRef.hp)))} / ${shortNum(bossRef.maxHp)}`;
       document.getElementById("bossname").textContent = bossRef.name;
       document.getElementById("bosshp").classList.toggle("final", bossRef.kind === "final");
     }
@@ -771,12 +778,13 @@ function update(dt){
         backT = .5;
       }
     }
-    if (!sees || d > 3 || (e.boss && e.pathT > 0)){
+    if (!sees || d > 3 || (e.boss && e.pathT > 0) || !clearPath(e, d, ux, uy)){
       const f = flowDir(e);
       if (f){ mx = f.x; my = f.y; }
     }
     if (e.boss){
       const bx = e.x, by = e.y;
+      if (e.guard > 0) e.guard = Math.max(0, e.guard - dt);
       bossAI(e, dt, d, ux, uy, mx, my, sees);
       if (e.alive && !e.blink){
         const moved = Math.hypot(e.x - bx, e.y - by);
@@ -815,7 +823,11 @@ function update(dt){
       const want = 4.5;
       if (!sees){ wx = mx; wy = my; wantMove = true; }
       else if (d > want + .5){ wx = mx; wy = my; wantMove = true; }
-      else if (d < want - .5){ wx = -ux; wy = -uy; wantMove = true; }
+      else if (d < want - .5){
+        if (!solid(e.x - ux*.7, e.y - uy*.7, ER)){ wx = -ux; wy = -uy; wantMove = true; }
+        else if (!solid(e.x - uy*e.slideDir*.7, e.y + ux*e.slideDir*.7, ER)){ wx = -uy*e.slideDir; wy = ux*e.slideDir; wantMove = true; }
+        else e.slideDir *= -1;
+      }
       if (e.cd <= 0 && d < k.reach && sees){
         e.cd = k.rate * rateMul();
         shots.push({x:e.x, y:e.y, vx:ux*shotSpeed(), vy:uy*shotSpeed(), t:0});
@@ -1368,6 +1380,7 @@ function render(){
       o.tint = e.tint || null;
       if (e.kind === "final" && !dead) o.minB = .6;
       if (e.blink) o.alpha = blinkAlpha(e);
+      if (e.charge > 0) o.tint = "rgba(215,150,255,.55)";
     }
     if (o){
       o.hurt = !dead && e.hurtT > 0;

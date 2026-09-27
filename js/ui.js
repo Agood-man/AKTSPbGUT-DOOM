@@ -316,7 +316,12 @@ function beginRun(sv){
     lifeDrops = Math.max(0, num(sv.lifeDrops, 0) | 0);
     bestStreak = Math.max(0, num(sv.streak, 0) | 0);
     seedCustom = !!sv.seedCustom;
-    skill = Math.max(0, Math.min(SKILL_MAX, num(sv.skill, 0)));
+    bossKills = Math.max(0, num(sv.bossKills, -1) | 0);
+    if (sv.bossKills === undefined){
+      const old = Math.max(0, Math.min(SKILL_CAP * .999, num(sv.skill, 0)));
+      bossKills = Math.round(Math.log(1 - old / SKILL_CAP) / Math.log(SKILL_DECAY));
+    }
+    skill = skillFor(bossKills);
     if (Array.isArray(sv.inv)){
       inv.rage = Math.min(INV_MAX, num(sv.inv[0], 0) | 0);
       inv.haste = Math.min(INV_MAX, num(sv.inv[1], 0) | 0);
