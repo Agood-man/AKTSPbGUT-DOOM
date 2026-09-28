@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="ПТУ 3D">
 <meta name="theme-color" content="#120c0a">
 
-<link rel="stylesheet" href="css/style.css?v=20261001a">
+<link rel="stylesheet" href="css/style.css?v=20261001c">
 </head>
 <body>
 <div id="wrap">
@@ -215,9 +215,11 @@
     </div>
     <p id="seedhint" style="font-size:11px;opacity:.6">Пустое поле — случайное подземелье. Одно семя даёт одни и те же уровни.</p>
     <button id="cont" class="gone">ПРОДОЛЖИТЬ</button>
-    <button id="start">НАЧАТЬ</button>
+    <div id="startrow">
+      <button id="start">НАЧАТЬ</button>
+      <button id="coopbtn" class="setbtn" type="button">КООП</button>
+    </div>
     <button id="settingsbtn" class="setbtn" type="button">НАСТРОЙКИ</button>
-    <button id="coopbtn" class="setbtn" type="button">КООП</button>
     <p id="rec" style="font-size:12px;opacity:.7"></p>
     <p id="legal">Игра — вымысел и пародия, созданная исключительно для развлечения.
     Она не имеет целью оскорбить кого-либо и никого не призвана задеть.
@@ -228,18 +230,18 @@
 </div>
 
 
-<script src="js/core.js?v=20261001a"></script>
-<script src="js/textures.js?v=20261001a"></script>
-<script src="js/audio.js?v=20261001a"></script>
-<script src="js/state.js?v=20261001a"></script>
-<script src="js/gameplay.js?v=20261001a"></script>
-<script src="js/renderer.js?v=20261001a"></script>
-<script src="js/face.js?v=20261001a"></script>
-<script src="js/weapons.js?v=20261001a"></script>
-<script src="js/ui.js?v=20261001a"></script>
-<script src="js/net.js?v=20261001a"></script>
-<script src="js/coopgame.js?v=20261001a"></script>
-<script src="js/main.js?v=20261001a"></script>
+<script src="js/core.js?v=20261001c"></script>
+<script src="js/textures.js?v=20261001c"></script>
+<script src="js/audio.js?v=20261001c"></script>
+<script src="js/state.js?v=20261001c"></script>
+<script src="js/gameplay.js?v=20261001c"></script>
+<script src="js/renderer.js?v=20261001c"></script>
+<script src="js/face.js?v=20261001c"></script>
+<script src="js/weapons.js?v=20261001c"></script>
+<script src="js/ui.js?v=20261001c"></script>
+<script src="js/net.js?v=20261001c"></script>
+<script src="js/coopgame.js?v=20261001c"></script>
+<script src="js/main.js?v=20261001c"></script>
 <script>
 (function(){
   var CF_TOKEN = "990785e2778e46c89a8bcc756ab1f7a5";
