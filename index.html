@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="ПТУ 3D">
 <meta name="theme-color" content="#120c0a">
 
-<link rel="stylesheet" href="css/style.css?v=20260930c">
+<link rel="stylesheet" href="css/style.css?v=20261001a">
 </head>
 <body>
 <div id="wrap">
@@ -171,6 +171,25 @@
     <p id="setnote"></p>
     <button id="setclose" type="button">ГОТОВО</button>
   </div>
+  <div id="coop" class="gone">
+    <h2>КООП</h2>
+    <p class="cp-sub">до 5 игроков · связь напрямую, без своего сервера</p>
+    <label class="cp-row"><span>Твоё имя</span><input id="cp_name" maxlength="12" placeholder="Студент" autocomplete="off"></label>
+    <div id="cp_start" class="cp-btns">
+      <button id="cp_host" type="button">СОЗДАТЬ КОМНАТУ</button>
+      <div class="cp-join"><input id="cp_code" maxlength="5" placeholder="КОД" autocomplete="off" autocapitalize="characters"><button id="cp_join" type="button">ВОЙТИ</button></div>
+    </div>
+    <div id="cp_room" class="gone">
+      <div class="cp-code">КОД КОМНАТЫ <b id="cp_codeshow"></b> <button id="cp_copy" type="button">КОПИРОВАТЬ</button></div>
+      <div id="cp_players"></div>
+      <p id="cp_hint"></p>
+      <button id="cp_go" type="button" class="gone">НАЧАТЬ ВМЕСТЕ</button>
+      <button id="cp_back" type="button">ВЫЙТИ ИЗ КОМНАТЫ</button>
+    </div>
+    <p id="cp_status"></p>
+    <p id="cp_diag"></p>
+    <button id="cp_leave" type="button">НАЗАД</button>
+  </div>
   <div id="layoutbar" class="gone">
     <span>Перетаскивай кнопки и карту</span>
     <button id="layoutreset" type="button">СБРОС</button>
@@ -198,6 +217,7 @@
     <button id="cont" class="gone">ПРОДОЛЖИТЬ</button>
     <button id="start">НАЧАТЬ</button>
     <button id="settingsbtn" class="setbtn" type="button">НАСТРОЙКИ</button>
+    <button id="coopbtn" class="setbtn" type="button">КООП</button>
     <p id="rec" style="font-size:12px;opacity:.7"></p>
     <p id="legal">Игра — вымысел и пародия, созданная исключительно для развлечения.
     Она не имеет целью оскорбить кого-либо и никого не призвана задеть.
@@ -208,16 +228,18 @@
 </div>
 
 
-<script src="js/core.js?v=20260930c"></script>
-<script src="js/textures.js?v=20260930c"></script>
-<script src="js/audio.js?v=20260930c"></script>
-<script src="js/state.js?v=20260930c"></script>
-<script src="js/gameplay.js?v=20260930c"></script>
-<script src="js/renderer.js?v=20260930c"></script>
-<script src="js/face.js?v=20260930c"></script>
-<script src="js/weapons.js?v=20260930c"></script>
-<script src="js/ui.js?v=20260930c"></script>
-<script src="js/main.js?v=20260930c"></script>
+<script src="js/core.js?v=20261001a"></script>
+<script src="js/textures.js?v=20261001a"></script>
+<script src="js/audio.js?v=20261001a"></script>
+<script src="js/state.js?v=20261001a"></script>
+<script src="js/gameplay.js?v=20261001a"></script>
+<script src="js/renderer.js?v=20261001a"></script>
+<script src="js/face.js?v=20261001a"></script>
+<script src="js/weapons.js?v=20261001a"></script>
+<script src="js/ui.js?v=20261001a"></script>
+<script src="js/net.js?v=20261001a"></script>
+<script src="js/coopgame.js?v=20261001a"></script>
+<script src="js/main.js?v=20261001a"></script>
 <script>
 (function(){
   var CF_TOKEN = "990785e2778e46c89a8bcc756ab1f7a5";
