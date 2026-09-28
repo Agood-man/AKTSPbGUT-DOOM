@@ -142,6 +142,10 @@
   }
   #settings #setclose{margin-bottom:auto;min-width:180px;background:var(--bone);color:#1a120e;font-size:14px}
   #settings #setnote{font-size:11px;opacity:.6;margin:0;min-height:14px}
+  #startrow{display:flex;gap:10px;justify-content:center;align-items:stretch}
+  #startrow button{margin:0}
+  .mptag{position:absolute;left:0;top:0;z-index:3;pointer-events:none;font-size:11px;letter-spacing:1px;white-space:nowrap;
+    font-weight:bold;text-shadow:0 1px 0 #000,0 0 3px #000,1px 0 0 #000,-1px 0 0 #000}
   #coop{
     position:absolute;inset:0;z-index:8;display:flex;flex-direction:column;align-items:center;
     justify-content:flex-start;gap:10px;padding:20px;overflow-y:auto;background:#120c0a;color:var(--bone);text-align:center;
