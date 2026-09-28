@@ -142,6 +142,38 @@
   }
   #settings #setclose{margin-bottom:auto;min-width:180px;background:var(--bone);color:#1a120e;font-size:14px}
   #settings #setnote{font-size:11px;opacity:.6;margin:0;min-height:14px}
+  #coop{
+    position:absolute;inset:0;z-index:8;display:flex;flex-direction:column;align-items:center;
+    justify-content:flex-start;gap:10px;padding:20px;overflow-y:auto;background:#120c0a;color:var(--bone);text-align:center;
+  }
+  #coop h2{margin:auto 0 0;font-size:clamp(28px,8vw,44px);letter-spacing:8px;text-shadow:0 3px 0 #000}
+  #coop .cp-sub{font-size:11px;opacity:.6;margin:0 0 6px}
+  #coop .cp-row{display:grid;gap:4px;width:min(320px,90%);font-size:12px}
+  #coop input{padding:10px;font:inherit;font-size:14px;letter-spacing:2px;text-align:center;
+    background:rgba(0,0,0,.5);color:var(--bone);border:2px solid rgba(232,220,192,.35)}
+  #coop button{padding:10px 16px;font:inherit;font-size:12px;letter-spacing:2px;cursor:pointer;touch-action:manipulation;
+    background:transparent;color:var(--bone);border:2px solid rgba(232,220,192,.4)}
+  #coop .cp-btns{display:flex;flex-direction:column;gap:10px;width:min(320px,90%)}
+  #coop #cp_host{background:var(--bone);color:#1a120e;font-size:14px}
+  #coop .cp-join{display:flex;gap:8px}
+  #coop .cp-join input{flex:1;min-width:0;letter-spacing:6px}
+  #coop #cp_room{display:flex;flex-direction:column;align-items:center;gap:10px;width:min(360px,94%)}
+  #coop .cp-code{font-size:12px;letter-spacing:2px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center}
+  #coop .cp-code b{font-size:28px;letter-spacing:8px;color:#e8c85a;font-family:monospace}
+  #coop .cp-code button{padding:6px 10px;font-size:10px}
+  #cp_players{display:flex;flex-direction:column;gap:6px;width:100%}
+  .cp-player{display:grid;grid-template-columns:40px 10px 1fr auto;align-items:center;gap:10px;padding:6px 10px;
+    background:rgba(232,220,192,.06);border:1px solid rgba(232,220,192,.12);text-align:left}
+  .cp-player img{width:40px;height:48px;image-rendering:pixelated}
+  .cp-player i{width:10px;height:28px;border-radius:2px}
+  .cp-player .cp-name{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cp-player .cp-info{font-size:11px;opacity:.7;text-align:right}
+  #cp_hint{font-size:11px;opacity:.55;margin:0;line-height:1.5}
+  #cp_status{font-size:13px;margin:4px 0 0;min-height:18px;color:var(--slime)}
+  #cp_status.bad{color:#e8604a}
+  #cp_diag{font-size:10px;opacity:.5;margin:0;line-height:1.5;max-width:360px}
+  #coop #cp_leave{margin-bottom:auto;min-width:160px}
+  #coop #cp_go{background:var(--bone);color:#1a120e;font-size:14px;width:min(320px,90%)}
   #layoutbar{
     position:absolute;left:0;right:0;top:calc(70px + env(safe-area-inset-top));z-index:9;
     display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;
