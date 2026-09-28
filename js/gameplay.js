@@ -102,9 +102,9 @@ function supplyTick(dt){
   supplyT -= dt;
   if (supplyT > 0) return;
   const fin = bossRef.kind === "final";
-  supplyT = fin ? 10 : 18;
+  supplyT = (fin ? 10 : 18) / Math.sqrt(coopN());
   const onFloor = items.filter(i => !i.dead && i.supply).length;
-  if (onFloor >= (fin ? 4 : 3)) return;
+  if (onFloor >= (fin ? 4 : 3) + coopN() - 1) return;
   for (let t = 0; t < 80; t++){
     const x = 5.5 + Math.random()*24, y = 5.5 + Math.random()*24;
     if (solid(x, y, .4)) continue;
@@ -535,10 +535,12 @@ function bossDefeated(e){
       items.push({kind, x, y, t:Math.random()*6});
     }
   };
-  drop("bullets", 4); drop("shells", 3); drop("grenades", 2);
-  drop("medkit", 2); drop("armor", 1);
-  drop(randomBuff(), 1);
+  const nP = coopN();
+  drop("bullets", 4 * nP); drop("shells", 3 * nP); drop("grenades", 2 * nP);
+  drop("medkit", 2 * nP); drop("armor", nP);
+  for (let i = 0; i < nP; i++) drop(randomBuff(), 1);
   if (Math.random() < lifeChanceFor(e)){ drop("life", 1); lifeDrops++; }
+  for (let i = 1; i < nP; i++) if (Math.random() < (e.kind === "final" ? .35 : .15)) drop("life", 1);
   for (const m of enemies) if (m.alive && m.minion){ m.alive = false; m.deadT = 0; }
   showBanner(`${e.name} ПОВЕРЖЕН${e.name.endsWith("А") ? "А" : ""}`, true, "забери награду");
 
@@ -690,8 +692,10 @@ function nextLevel(){
   enemiesLeft = enemies.length;
 
   let gunHint = "";
-  for (let n=1; n<GUNS.length; n++){
-    if (level < GUN_AT[n] || unlocked[n]) continue;
+  if (mpIsClient()) gunHint = mpClientGunLamp();
+  else for (let n=1; n<GUNS.length; n++){
+    const need = mpIsHost() ? mpGunNeed(n) : (unlocked[n] ? 0 : 1);
+    if (level < GUN_AT[n] || need <= 0) continue;
     const [open8, open4] = openCells();
     const far = c => Math.hypot((c % MW) + .5 - P.x, ((c / MW) | 0) + .5 - P.y) >= 4;
     const pool = open8.filter(far).length ? open8.filter(far) : open4.filter(far);
@@ -699,6 +703,8 @@ function nextLevel(){
     if (pool.length){ const c = pool[(Math.random()*pool.length) | 0]; gx = c % MW; gy = (c / MW) | 0; }
     else { const g = freeCell(4); gx = g.x | 0; gy = g.y | 0; }
     items.push({kind:"gun" + n, x:gx + .5, y:gy + .5, t:0});
+    for (let k = 1; k < need; k++){ const q = mpGunSpot(gx + .5, gy + .5, k, need); items.push({kind:"gun" + n, x:q.x, y:q.y, t:0}); }
+    if (mpIsHost()) MP.lvlGun = [gx, gy, n];
     LAMPS = LAMPS.filter(L => Math.hypot(L.x - gx, L.y - gy) >= 5);
     const gl = addLamp(gx, gy, 4.5, .85, "flicker", 0);
     if (gl) gl.gun = "gun" + n;
@@ -706,12 +712,12 @@ function nextLevel(){
     gunHint = `НА ЭТАЖЕ: ${GUNS[n].name}`;
     break;
   }
-  if (level >= 5 && Math.random() < .4){
+  for (let r = 0; r < coopN(); r++) if (level >= 5 && Math.random() < .4){
     const k = randomBuff();
     const b = freeCell(5);
     items.push({kind:k, x:b.x, y:b.y, t:0});
   }
-  if (level >= 8 && unlocked[3] && Math.random() < .5 * stockFactor("grenades")){
+  for (let r = 0; r < coopN(); r++) if (level >= 8 && unlocked[3] && Math.random() < .5 * stockFactor("grenades")){
     const gr = freeCell(4);
     items.push({kind:"grenades", x:gr.x, y:gr.y, t:0});
   }
@@ -722,7 +728,8 @@ function nextLevel(){
     ["shells",  ammoCount("shells", C.shells)],
     ["armor",   level % 2 === 0 ? 1 : 0]
   ];
-  for (const [kind, count] of drops){
+  for (const [kind, count0] of drops){
+    const count = Math.round(count0 * coopK("items"));
     for (let i=0;i<count;i++){
       const p = freeCell(3);
       items.push({kind, x:p.x, y:p.y, t:Math.random()*6});

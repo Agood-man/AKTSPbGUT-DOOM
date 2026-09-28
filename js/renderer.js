@@ -580,7 +580,7 @@ function damageEnemy(e, dmg){
   registerKill();
   if (e.boss){ bossDefeated(e); return; }
   const dry = ammo.bullets < 12 && ammo.shells < 3;
-  if (dry || Math.random() < curve().dropChance * (isBossLevel() ? 2 : 1)){
+  if (dry || Math.random() < Math.min(.8, curve().dropChance * (isBossLevel() ? 2 : 1) * coopK("mobDrop"))){
     const wb = .34 * stockFactor("bullets"), ws = .22 * stockFactor("shells"), wm = .44;
     const r = Math.random() * (wb + ws + wm);
     items.push({kind: r < wb ? "bullets" : r < wb + ws ? "shells" : "medkit", x:e.x, y:e.y, t:0});
@@ -1071,11 +1071,13 @@ function update(dt){
     } else if (it.kind === "bullets") taken = giveAmmo("bullets", curve().bulletAmt);
     else if (it.kind === "shells") taken = giveAmmo("shells", curve().shellAmt);
     else if (it.kind === "grenades") taken = giveAmmo("grenades", 4);
+    else if (GUN_OF[it.kind] !== undefined && mpIsHost() && unlocked[GUN_OF[it.kind]]) taken = false;
     else if (GUN_OF[it.kind] !== undefined){
       const n = GUN_OF[it.kind];
       unlocked[n] = true;
       const gl = LAMPS.find(L => L.gun === it.kind);
-      if (gl){
+      if (gl && mpIsHost()) mpGunLampOff(it.kind, it);
+      else if (gl){
         gl.state = "off"; gl.val = 0; gl.gun = null;
         composeLight();
         const a = atPos(gl.x + .5, gl.y + .5);

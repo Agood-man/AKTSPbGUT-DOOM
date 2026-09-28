@@ -2,10 +2,17 @@ var SHIRTS = ["#2f5aa8", "#b02a24", "#2f8a3a", "#c9a227", "#7a3fb0"];
 var SHIRT_NAMES = ["синяя", "красная", "зелёная", "жёлтая", "фиолетовая"];
 var COOP_MAX = 5, COOP_VER = "coop-1";
 var COOP_TRACKERS = [
-  "wss://tracker.openwebtorrent.com",
   "wss://tracker.webtorrent.dev",
+  "wss://tracker.openwebtorrent.com",
   "wss://tracker.btorrent.xyz",
+  "wss://open.ftorrent.com",
   "wss://tracker.files.fm:7073/announce"
+];
+var COOP_MQTT = [
+  "wss://broker.emqx.io:8084/mqtt",
+  "wss://broker.hivemq.com:8884/mqtt",
+  "wss://test.mosquitto.org:8081/mqtt",
+  "wss://public.mqtthq.com:8084/mqtt"
 ];
 var COOP_ICE = [
   {urls:["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"]},
@@ -13,9 +20,71 @@ var COOP_ICE = [
   {urls:"stun:stun.sipgate.net:3478"}
 ];
 (() => {
-  const t = new URLSearchParams(location.search).get("tracker");
-  if (t) COOP_TRACKERS = [t];
+  const q = new URLSearchParams(location.search), t = q.get("tracker"), m = q.get("mqtt");
+  if (t) COOP_TRACKERS = t === "none" ? [] : [t];
+  if (m) COOP_MQTT = m === "none" ? [] : [m];
+  else if (t) COOP_MQTT = [];
 })();
+
+function mqttConn(url, onOpen, onMsg, onFail){
+  let ws;
+  try { ws = new WebSocket(url, ["mqtt"]); } catch(e){ setTimeout(onFail, 0); return null; }
+  ws.binaryType = "arraybuffer";
+  const enc = new TextEncoder(), dec = new TextDecoder();
+  const str = s => { const b = enc.encode(s); return [b.length >> 8, b.length & 255, ...b]; };
+  const pkt = (type, body) => {
+    const len = []; let n = body.length;
+    do { let d = n % 128; n = Math.floor(n / 128); if (n > 0) d |= 128; len.push(d); } while (n > 0);
+    const out = new Uint8Array(1 + len.length + body.length);
+    out[0] = type; out.set(len, 1); out.set(body, 1 + len.length);
+    return out;
+  };
+  let pid = 1, ping = null, buf = new Uint8Array(0), failed = false;
+  const fail = () => { if (failed) return; failed = true; clearInterval(ping); onFail(); };
+  const api = {
+    ws,
+    sub(topic){ try { ws.send(pkt(0x82, [pid >> 8, pid & 255, ...str(topic), 0])); pid = (pid % 65000) + 1; } catch(e){} },
+    pub(topic, text){
+      const t = str(topic), b = enc.encode(text), body = new Uint8Array(t.length + b.length);
+      body.set(t); body.set(b, t.length);
+      try { ws.send(pkt(0x30, body)); } catch(e){}
+    },
+    close(){ clearInterval(ping); failed = true; try { ws.close(); } catch(e){} }
+  };
+  ws.onopen = () => { try { ws.send(pkt(0x10, [...str("MQTT"), 4, 2, 0, 60, ...str("ptu3d" + rid(14))])); } catch(e){ fail(); } };
+  ws.onmessage = ev => {
+    const d = new Uint8Array(ev.data);
+    const all = new Uint8Array(buf.length + d.length); all.set(buf); all.set(d, buf.length);
+    let i = 0;
+    while (i < all.length){
+      const type = all[i];
+      let mul = 1, len = 0, j = i + 1, byte;
+      do {
+        if (j >= all.length){ buf = all.slice(i); return; }
+        byte = all[j++]; len += (byte & 127) * mul; mul *= 128;
+      } while (byte & 128);
+      if (j + len > all.length){ buf = all.slice(i); return; }
+      const body = all.subarray(j, j + len), kind = type >> 4;
+      if (kind === 2){
+        if (body[1] !== 0){ fail(); return; }
+        onOpen(api);
+        ping = setInterval(() => { try { ws.send(new Uint8Array([0xC0, 0])); } catch(e){} }, 30000);
+      } else if (kind === 3){
+        const tl = (body[0] << 8) | body[1];
+        const topic = dec.decode(body.subarray(2, 2 + tl));
+        let p = 2 + tl;
+        if (((type >> 1) & 3) > 0) p += 2;
+        try { onMsg(topic, dec.decode(body.subarray(p))); } catch(e){}
+      }
+      i = j + len;
+    }
+    buf = new Uint8Array(0);
+  };
+  ws.onerror = fail;
+  ws.onclose = fail;
+  return api;
+}
+function mqttTopic(code, who){ return "ptu3d-coop/" + code + "/" + who; }
 
 var coop = null;
 
@@ -107,13 +176,34 @@ function coopLeave(silent){
   if (s.role === "host") for (const p of s.peers.values()){ coopSend(p.ch, {t:"bye"}); try { p.pc.close(); } catch(e){} }
   if (s.host){ coopSend(s.host.ch, {t:"bye"}); try { s.host.pc.close(); } catch(e){} }
   for (const p of s.pending.values()){ try { p.pc.close(); } catch(e){} }
-  for (const t of s.trackers){ try { t.ws && t.ws.close(); } catch(e){} }
+  for (const t of s.trackers){ try { if (t.mq) t.mq.close(); else if (t.ws) t.ws.close(); } catch(e){} }
   coop = null;
   setShirt(-1);
   if (!silent) coopRender();
 }
 
 function openTrackers(s){
+  for (const url of COOP_MQTT){
+    const t = {url, kind:"mqtt", mq:null, state:"connecting"};
+    s.trackers.push(t);
+    t.mq = mqttConn(url, api => {
+      if (s.closed){ api.close(); return; }
+      t.state = "ok";
+      api.sub(mqttTopic(s.code, "all"));
+      api.sub(mqttTopic(s.code, s.me));
+      coopRender();
+    }, (topic, text) => {
+      if (s.closed) return;
+      let m; try { m = JSON.parse(text); } catch(e){ return; }
+      if (!m || typeof m.from !== "string" || m.from === s.me) return;
+      if (Array.isArray(m.offers)){
+        for (const o of m.offers.slice(0, 6)) if (o && o.offer && typeof o.offer_id === "string")
+          onTracker(s, t, {info_hash:s.hash, offer:o.offer, offer_id:o.offer_id, peer_id:m.from});
+      } else if (m.answer && typeof m.offer_id === "string"){
+        onTracker(s, t, {info_hash:s.hash, answer:m.answer, offer_id:m.offer_id, peer_id:m.from});
+      }
+    }, () => { t.state = t.state === "ok" ? "closed" : "fail"; coopRender(); });
+  }
   for (const url of COOP_TRACKERS){
     const t = {url, ws:null, state:"connecting"};
     s.trackers.push(t);
@@ -131,6 +221,14 @@ function openTrackers(s){
 }
 
 function trackerSend(t, obj){
+  if (t.kind === "mqtt"){
+    if (!t.mq || t.state !== "ok" || !coop) return;
+    if (obj.answer && obj.to_peer_id)
+      t.mq.pub(mqttTopic(coop.code, obj.to_peer_id), JSON.stringify({from:obj.peer_id, answer:obj.answer, offer_id:obj.offer_id}));
+    else if (obj.offers)
+      t.mq.pub(mqttTopic(coop.code, "all"), JSON.stringify({from:obj.peer_id, offers:obj.offers}));
+    return;
+  }
   if (t.ws && t.ws.readyState === 1){ try { t.ws.send(JSON.stringify(obj)); } catch(e){} }
 }
 

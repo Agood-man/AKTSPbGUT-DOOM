@@ -15,6 +15,9 @@ function mpPeers(){
   return out;
 }
 function coopN(){ return mpIsHost() ? 1 + mpPeers().length : 1; }
+var COOP_CURVE = {count:.4, hp:.12, boss:.65, mobDrop:.25, items:.6};
+var COOP_ENEMY_CAP = 60;
+function coopK(k){ return 1 + COOP_CURVE[k] * (coopN() - 1); }
 
 function mpTargets(){
   const t = [];
@@ -70,12 +73,11 @@ function mpRemotePickups(){
       const dx = it.x - p.gs.x, dy = it.y - p.gs.y;
       if (dx*dx + dy*dy > (PR + .38)*(PR + .38)) continue;
       if (it.kind === "medkit" && p.gs.hp >= 100) continue;
+      const gn = GUN_OF[it.kind];
+      if (gn !== undefined && (((p.gs.u || 0) >> gn) & 1)) continue;
       it.dead = true;
       coopSend(p.ch, {t:"give", k:it.kind});
-      if (GUN_OF[it.kind] !== undefined){
-        const gl = LAMPS.find(L => L.gun === it.kind);
-        if (gl){ gl.state = "off"; gl.val = 0; gl.gun = null; composeLight(); }
-      }
+      if (gn !== undefined){ p.gs.u = (p.gs.u || 0) | (1 << gn); mpGunLampOff(it.kind, it); }
       break;
     }
   }
@@ -88,14 +90,14 @@ function mpNearPlayer(x, y, r){
 function mpScaleLevel(C){
   const n = coopN();
   if (n <= 1) return;
-  const extra = Math.round(C.count * .4 * (n - 1));
+  const extra = Math.max(0, Math.min(Math.round(C.count * COOP_CURVE.count * (n - 1)), COOP_ENEMY_CAP - enemies.length));
   for (let i = 0; i < extra; i++){
     const src = enemies[(Math.random() * enemies.length) | 0];
     if (!src) break;
     const p = freeCell(8);
     enemies.push(Object.assign({}, src, {x:p.x, y:p.y, id:0, seen:false, t:Math.random()*10}));
   }
-  const hm = 1 + .12 * (n - 1);
+  const hm = coopK("hp");
   for (const e of enemies) e.hp = Math.round(e.hp * hm);
 }
 
@@ -103,9 +105,10 @@ function mpOnLevel(){
   if (P.dead){ P.dead = false; P.hp = Math.max(P.hp, 50); updateHUD(); }
   if (mpIsHost()){
     const n = coopN();
-    if (bossRef && n > 1){ bossRef.maxHp = Math.round(bossRef.maxHp * (1 + .65 * (n - 1))); bossRef.hp = bossRef.maxHp; }
+    if (bossRef && n > 1){ bossRef.maxHp = Math.round(bossRef.maxHp * coopK("boss")); bossRef.hp = bossRef.maxHp; }
     MP.nid = 0;
-    if (MP.started) for (const p of mpPeers()){ p.gs.alive = true; coopSend(p.ch, {t:"lvl", L:level}); }
+    if (MP.started) for (const p of mpPeers()){ p.gs.alive = true; coopSend(p.ch, {t:"lvl", L:level, g:MP.lvlGun || 0}); }
+    MP.lvlGun = null;
   } else if (mpIsClient()){
     enemies = []; items = []; shots = []; grenades.length = 0; bossRef = null; portal = null;
     beams.length = 0; mpEnt.clear();
@@ -225,6 +228,7 @@ function mpTick(dt){
   } else if (MP.sendT <= 0 && coop.host){
     MP.sendT = 1/15;
     coopSend(coop.host.ch, {t:"st", x:+P.x.toFixed(2), y:+P.y.toFixed(2), a:+P.a.toFixed(3), g:gun, al:P.dead ? 0 : 1,
+                            u:unlocked.reduce((m, v, i) => m | (v ? 1 << i : 0), 0),
                             hp:Math.round(P.hp), W, H, pl:+CAM_PLANE.toFixed(3)});
   }
 }
@@ -275,7 +279,7 @@ function mpHostMsg(s, peer, m){
     const g = peer.gs || (peer.gs = {alive:true});
     if (typeof m.x === "number" && typeof m.y === "number" && !solid(m.x, m.y, .05)){ g.x = m.x; g.y = m.y; }
     if (g.x === undefined){ g.x = P.x; g.y = P.y; }
-    g.a = +m.a || 0; g.gun = m.g | 0; g.hp = +m.hp || 0;
+    g.a = +m.a || 0; g.gun = m.g | 0; g.hp = +m.hp || 0; g.u = m.u | 0;
     g.W = Math.max(80, Math.min(640, m.W | 0)); g.H = Math.max(60, Math.min(1400, m.H | 0)); g.pl = Math.max(.3, Math.min(2, +m.pl || .66));
     if (m.al && !g.alive && g.hp > 0) g.alive = true;
   } else if (m.t === "fire" && peer.gs && peer.gs.alive){
@@ -301,7 +305,14 @@ function mpClientMsg(s, m){
     mpStartRun("client", m.seed);
   } else if (!mpIsClient()) return;
   if (m.t === "snap") mpApplySnap(m);
-  else if (m.t === "lvl" && Number.isFinite(m.L)){ level = Math.max(0, (m.L | 0) - 1); nextLevel(); }
+  else if (m.t === "lvl" && Number.isFinite(m.L)){
+    mpLvlGun = Array.isArray(m.g) && m.g.length === 3 ? m.g.map(v => v | 0) : null;
+    level = Math.max(0, (m.L | 0) - 1); nextLevel(); mpLvlGun = null;
+  }
+  else if (m.t === "lamp" && typeof m.k === "string"){
+    const gl = LAMPS.find(L => L.gun === m.k);
+    if (gl){ gl.state = "off"; gl.val = 0; gl.gun = null; composeLight(); }
+  }
   else if (m.t === "hurt"){ damagePlayer(Math.max(0, Math.min(500, +m.a || 0)), +m.x || P.x, +m.y || P.y); }
   else if (m.t === "give" && typeof m.k === "string") applyGive(m.k);
   else if (m.t === "fx"){
@@ -337,38 +348,164 @@ function mpHostStart(){
 function mpEnd(msg){
   if (!MP) return;
   const wasClient = MP.role === "client";
-  MP = null; mpTarget = null; mpRemote = []; mpEnt.clear(); P.dead = false;
+  MP = null; mpTarget = null; mpRemote = []; mpEnt.clear(); P.dead = false; mpHideTags();
   if (msg && playing){ quitToMenu(); showBanner(msg, true); }
   else if (msg && wasClient){ showBanner(msg, true); }
 }
 
 function mpQuit(){
   if (mpIsHost()) for (const p of mpPeers()) coopSend(p.ch, {t:"end"});
-  MP = null; mpTarget = null; mpRemote = []; mpEnt.clear(); P.dead = false;
+  MP = null; mpTarget = null; mpRemote = []; mpEnt.clear(); P.dead = false; mpHideTags();
 }
 
-var playerSprites = {};
-function playerSprite(slot){
-  if (playerSprites[slot]) return playerSprites[slot];
-  const keep = shirtColor;
-  shirtColor = SHIRTS[slot] || SHIRT_DEFAULT;
-  paintFace({mood:"calm", dmg:0, dir:0, blink:false});
-  const c = document.createElement("canvas"); c.width = c.height = 64;
-  const g = c.getContext("2d"); g.imageSmoothingEnabled = false;
-  g.drawImage(faceCv, 12, 4, 40, 48);
-  g.fillStyle = shirtColor; g.fillRect(12, 52, 40, 12);
-  shirtColor = keep; faceKey = "";
-  playerSprites[slot] = c;
-  return c;
+var STUDENT_FRAMES = {};
+function shirtShade(hex, k){
+  const n = parseInt(hex.slice(1), 16);
+  return `rgb(${(((n >> 16) & 255) * k) | 0},${(((n >> 8) & 255) * k) | 0},${((n & 255) * k) | 0})`;
 }
+function studentFrames(slot){
+  if (STUDENT_FRAMES[slot]) return STUDENT_FRAMES[slot];
+  const shirt = SHIRTS[slot] || SHIRT_DEFAULT, sleeve = shirtShade(shirt, .78);
+  const skin = "#d8a06a", hair = "#3a2a1c", pants = "#262a36", pantsFar = "#1a1d26", shoe = "#141210", dark = "#20140c", lip = "#8a4f30";
+  const mk = (draw, mirror) => {
+    const c = document.createElement("canvas"); c.width = c.height = 64;
+    const g = c.getContext("2d");
+    if (mirror){ g.translate(64, 0); g.scale(-1, 1); }
+    draw((x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x*2, y*2 + 4, w*2, h*2); });
+    return c;
+  };
+  const body = (px, f, back) => {
+    const lL = f === 0 ? 2 : 0, lR = f === 2 ? 2 : 0;
+    const aL = f === 2 ? -1 : f === 0 ? 1 : 0, aR = -aL;
+    px(10, 10, 12, 8, shirt);
+    if (!back) px(14, 10, 4, 1, "#f2ece0");
+    px(8, 10 + aL, 2, 7, sleeve); px(8, 17 + aL, 2, 1, skin);
+    px(22, 10 + aR, 2, 7, sleeve); px(22, 17 + aR, 2, 1, skin);
+    px(10, 18, 12, 3, pants);
+    px(11, 21, 4, 7 - lL, pants); px(17, 21, 4, 7 - lR, pants);
+    px(10, 28 - lL, 5, 2, shoe); px(17, 28 - lR, 5, 2, shoe);
+  };
+  const front = f => mk(px => {
+    px(11, 0, 10, 3, hair); px(10, 2, 1, 4, hair); px(21, 2, 1, 4, hair);
+    px(11, 3, 10, 6, skin); px(13, 5, 2, 1, dark); px(17, 5, 2, 1, dark); px(14, 7, 4, 1, lip);
+    px(14, 9, 4, 1, skin);
+    body(px, f, false);
+  });
+  const back = f => mk(px => {
+    px(11, 0, 10, 9, hair); px(10, 4, 1, 2, skin); px(21, 4, 1, 2, skin);
+    px(14, 9, 4, 1, skin);
+    body(px, f, true);
+  });
+  const side = (f, mirror) => mk(px => {
+    const st = [3, 0, -3, 0][f], sw = [-2, 0, 2, 0][f];
+    px(15 - st, 21, 3, 7, pantsFar); px(15 - st, 28, 4, 2, shoe);
+    px(12, 0, 8, 3, hair); px(12, 3, 3, 5, hair);
+    px(15, 3, 6, 6, skin); px(19, 5, 1, 1, dark); px(21, 5, 1, 1, skin); px(19, 7, 2, 1, lip);
+    px(15, 9, 3, 1, skin);
+    px(13, 10, 7, 8, shirt);
+    px(13, 18, 7, 3, pants);
+    px(15 + st, 21, 3, 7, pants); px(15 + st, 28, 4, 2, shoe);
+    px(15 + sw, 11, 3, 6, sleeve); px(15 + sw, 17, 3, 1, skin);
+  }, mirror);
+  const F = {front:[], back:[], right:[], left:[]};
+  for (let f = 0; f < 4; f++){ F.front.push(front(f)); F.back.push(back(f)); F.right.push(side(f, false)); F.left.push(side(f, true)); }
+  STUDENT_FRAMES[slot] = F;
+  return F;
+}
+
+var mpVis = {}, mpTagEls = {};
+function mpPlayerList(){
+  if (mpIsHost()) return mpPeers().filter(p => p.gs.alive && p.gs.x !== undefined)
+    .map(p => ({slot:p.slot, x:p.gs.x, y:p.gs.y, a:p.gs.a || 0, name:p.name}));
+  return mpRemote.filter(p => p[4]).map(p => {
+    const pl = coop && coop.players.find(q => q.slot === p[0]);
+    return {slot:p[0], x:p[1], y:p[2], a:p[3], name:pl ? pl.name : ""};
+  });
+}
+function mpTagEl(slot){
+  let el = mpTagEls[slot];
+  if (!el){
+    el = document.createElement("span"); el.className = "mptag";
+    el.style.color = SHIRTS[slot] || "#fff";
+    document.getElementById("wrap").appendChild(el);
+    mpTagEls[slot] = el;
+  }
+  return el;
+}
+function mpHideTags(){ for (const k in mpTagEls) mpTagEls[k].style.display = "none"; }
 
 function mpAddPlayerSprites(addSprite){
-  const list = mpIsHost() ? mpPeers().filter(p => p.gs.alive).map(p => [p.slot, p.gs.x, p.gs.y])
-                          : mpRemote.filter(p => p[4]).map(p => [p[0], p[1], p[2]]);
-  for (const [slot, x, y] of list){
-    const o = addSprite(x, y, playerSprite(slot), .95, .02);
-    if (o) o.minB = .55;
+  const now = performance.now(), list = mpPlayerList(), shown = new Set();
+  const cr = document.getElementById("c").getBoundingClientRect(), wr = document.getElementById("wrap").getBoundingClientRect();
+  const dirX = Math.cos(P.a), dirY = Math.sin(P.a), planeX = -dirY*CAM_PLANE, planeY = dirX*CAM_PLANE;
+  const inv = 1 / (planeX*dirY - dirX*planeY);
+  for (const r of list){
+    let v = mpVis[r.slot];
+    if (!v) v = mpVis[r.slot] = {x:r.x, y:r.y, lx:r.x, ly:r.y, t:now, spd:0, anim:0};
+    const dt = Math.min(.1, Math.max(0, (now - v.t) / 1000)); v.t = now;
+    v.x += (r.x - v.x) * Math.min(1, dt*12); v.y += (r.y - v.y) * Math.min(1, dt*12);
+    const moved = Math.hypot(v.x - v.lx, v.y - v.ly); v.lx = v.x; v.ly = v.y;
+    if (dt > 0) v.spd += (moved / dt - v.spd) * Math.min(1, dt*6);
+    const moving = v.spd > .5;
+    v.anim = moving ? v.anim + dt * (2 + v.spd * 1.6) : 0;
+    const frame = moving ? Math.floor(v.anim * 1.6) % 4 : 1;
+    v.frame = frame;
+    const fx = Math.cos(r.a), fy = Math.sin(r.a);
+    const tvx = P.x - v.x, tvy = P.y - v.y, tl = Math.hypot(tvx, tvy) || 1;
+    const dFront = (fx*tvx + fy*tvy) / tl;
+    const F = studentFrames(r.slot);
+    let view;
+    if (dFront > .55) view = "front";
+    else if (dFront < -.55) view = "back";
+    else view = (fx*(-dirY) + fy*dirX) > 0 ? "right" : "left";
+    v.view = view;
+    const o = addSprite(v.x, v.y, F[view][frame], .85, .075);
+    if (o) o.minB = .5;
+
+    const dx = v.x - P.x, dy = v.y - P.y, dist = Math.hypot(dx, dy);
+    const ty = inv*(-planeY*dx + planeX*dy), tx = inv*(dirY*dx - dirX*dy);
+    const el = mpTagEl(r.slot);
+    if (ty > .3 && dist < 14 && rayLen(P.x, P.y, Math.atan2(dy, dx), dist) >= dist - .3){
+      const sx = (W/2) * (1 + tx/ty), sy = H/2 + (.075 - .425 - .06) * H/ty;
+      const cx = cr.left - wr.left + sx * cr.width / W, cy = cr.top - wr.top + sy * cr.height / H;
+      if (el.textContent !== r.name) el.textContent = r.name;
+      el.style.transform = `translate(${cx.toFixed(1)}px,${cy.toFixed(1)}px) translate(-50%,-100%)`;
+      el.style.opacity = Math.max(.35, Math.min(1, 1.4 - dist/12)).toFixed(2);
+      el.style.display = "";
+      shown.add(String(r.slot));
+    }
   }
+  for (const k in mpTagEls) if (!shown.has(k)) mpTagEls[k].style.display = "none";
+}
+
+function mpGunNeed(n){
+  let c = unlocked[n] ? 0 : 1;
+  for (const p of mpPeers()) if (!(((p.gs.u || 0) >> n) & 1)) c++;
+  return c;
+}
+function mpGunSpot(x, y, k, need){
+  for (let t = 0; t < 12; t++){
+    const a = (k / need) * 6.283 + t * .5, r = .75 + (t >> 2) * .25;
+    const qx = x + Math.cos(a)*r, qy = y + Math.sin(a)*r;
+    if (!solid(qx, qy, .3)) return {x:qx, y:qy};
+  }
+  return {x, y};
+}
+var mpLvlGun = null;
+function mpClientGunLamp(){
+  if (!mpLvlGun) return "";
+  const [gx, gy, n] = mpLvlGun;
+  LAMPS = LAMPS.filter(L => Math.hypot(L.x - gx, L.y - gy) >= 5);
+  const gl = addLamp(gx, gy, 4.5, .85, "flicker", 0);
+  if (gl) gl.gun = "gun" + n;
+  composeLight();
+  return `НА ЭТАЖЕ: ${GUNS[n].name}`;
+}
+function mpGunLampOff(kind, except){
+  if (items.some(o => o !== except && !o.dead && o.kind === kind)) return;
+  const gl = LAMPS.find(L => L.gun === kind);
+  if (gl){ gl.state = "off"; gl.val = 0; gl.gun = null; composeLight(); }
+  if (mpIsHost()) for (const p of mpPeers()) coopSend(p.ch, {t:"lamp", k:kind});
 }
 
 function mpMinimap(mm, ox, oy, s){
