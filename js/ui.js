@@ -188,6 +188,7 @@ function initSettings(){
 }
 
 function loop(t){
+  if (typeof mpActive === "function" && mpActive() && playing) mpTick(Math.min(.1, Math.max(0, (performance.now() - (loop.lastMp || performance.now())) / 1000))), loop.lastMp = performance.now();
   requestAnimationFrame(loop);
   const rawMs = (t - last) || 0;
   fpsTick(rawMs);
@@ -367,6 +368,7 @@ function setPause(v){
 }
 
 function quitToMenu(){
+  if (mpActive()) mpQuit();
   saveGame();
   setDrone(0);
   cheated = false; god = false; brightMode = false; sandbox = false; dbgFreeze = false;

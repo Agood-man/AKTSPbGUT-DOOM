@@ -1,5 +1,6 @@
 
 function saveGame(){
+  if (typeof mpActive === "function" && mpActive()) return;
   if (!playing || cheated) return;
   store.set(SAVE_KEY, JSON.stringify({
     v:1, level, kills, gun, seed:runSeed, seedName, cheated,
@@ -30,6 +31,7 @@ function getRecord(){
   } catch(e){ return {level:0, kills:0}; }
 }
 function saveRecord(){
+  if (typeof mpActive === "function" && mpActive()) return;
   if (cheated) return;
   const r = getRecord();
   const out = {level:num(r.level,0), kills:num(r.kills,0), streak:num(r.streak,0), custom:!!r.custom};
@@ -684,6 +686,7 @@ function nextLevel(){
       voiceT:2 + Math.random()*5, breathT:0, seeT:0, sees:false
     });
   }
+  if (mpIsHost()) mpScaleLevel(C);
   enemiesLeft = enemies.length;
 
   let gunHint = "";
@@ -728,6 +731,7 @@ function nextLevel(){
   stopBossIntro();
   finalOutro = null;
   parts.length = 0;
+  beams.length = 0; P.stunT = 0;
   P.slowT = 0;
   bossRef = null; portal = null; portalT = isFinalLevel() ? 3.4 : 1.6;
   supplyT = 9; supplyShown = false;
@@ -761,6 +765,7 @@ function nextLevel(){
   updateInvUI();
   updateLivesUI();
   document.getElementById("seedtag").classList.toggle("gone", !seedCustom);
+  if (mpActive()) mpOnLevel();
   saveGame();
 }
 

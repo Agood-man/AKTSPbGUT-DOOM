@@ -374,6 +374,7 @@ function drawMinimap(){
     const r = e.boss ? s*2.2 : s;
     mm.fillRect(ox + e.x*s - r/2, oy + e.y*s - r/2, r, r);
   }
+  if (mpActive()) mpMinimap(mm, ox, oy, s);
   for (const b of shots){
     const sp = Math.hypot(b.vx, b.vy) || 1;
     const tx = ox + (b.x - b.vx/sp*.5)*s, ty = oy + (b.y - b.vy/sp*.5)*s;

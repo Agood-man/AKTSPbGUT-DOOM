@@ -1,6 +1,7 @@
 "use strict";
 
 var MW = 35, MH = 35;
+var SHIRT_DEFAULT = "#2f3a55", shirtColor = SHIRT_DEFAULT;
 var SET_KEY = "terplandia3d.settings";
 var CTRL_KEYS = ["stick", "fire", "swap", "pausebtn", "minimap", "invbar"];
 function defaultCtrl(){
@@ -15,7 +16,7 @@ var LAMPS = [];
 var levelLight = "normal";
 var levelL = .9;
 var playerLight = 1;
-var SET_DEFAULT = { sensMouse:1, sensTouch:1, gamma:1, volume:1, quality:1, pos:{}, invHoriz:false };
+var SET_DEFAULT = { sensMouse:1, sensTouch:1, gamma:1, volume:1, quality:1, pos:{}, invHoriz:false, nick:"" };
 var SET = (() => {
   let s = {};
   try { s = JSON.parse(localStorage.getItem(SET_KEY)) || {}; } catch(e){}

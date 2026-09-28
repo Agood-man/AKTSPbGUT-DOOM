@@ -32,7 +32,7 @@ function paintFace(st){
   const lvl = st.dmg;
   fctx.clearRect(0, 0, 40, 48);
 
-  facePart(4, 40, 32, 8, "#2f3a55");
+  facePart(4, 40, 32, 8, shirtColor);
   facePart(14, 40, 12, 4, "#c9c0a8");
   facePart(15, 34, 10, 8, shade);
 

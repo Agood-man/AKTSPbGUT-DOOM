@@ -221,6 +221,7 @@ function bossSlam(e, radius, dmg){
 var FINAL_PHASES = ["", "ПАРА", "СЕССИЯ", "ОТЧИСЛЕНИЕ"];
 function finalAI(e, dt, d, ux, uy, mx, my, sees, frac){
   if (e.blink){ blinkStep(e, dt); return; }
+  if (e.laser){ e.atk -= dt; return; }
   const phase = frac > .66 ? 1 : frac > .33 ? 2 : 3;
   if (phase !== e.phase){
     e.phase = phase; e.guard = 1.4; e.dash = 0;
@@ -258,15 +259,25 @@ function finalAI(e, dt, d, ux, uy, mx, my, sees, frac){
   e.atk -= dt; e.atk2 -= dt; e.atk3 = (e.atk3 || 6) - dt;
   const busy = shots.length > 22;
   if (phase === 1){
-    if (e.atk <= 0 && sees && !busy){ e.atk = 3.1; finalVolley(e, ux, uy, 2, .24, .8); beep("sine", 260, .3, .16, 90); }
-    if (e.atk2 <= 0){ e.atk2 = 15; summonMinions(e, "imp", 2, 3); }
+    if (e.atk <= 0 && sees && !busy){
+      e.atk = 1.9 * rateMul();
+      const n = 2 + Math.floor(2 * bossLvl());
+      for (let i = -n; i <= n; i++) bossFire(e, ux, uy, i * .15);
+      beep("sine", 300, .3, .16, 90);
+    }
+    if (e.atk2 <= 0 && sees && !e.laser){ e.atk2 = 7; startBeam(e, "eyes"); }
   } else if (phase === 2){
     if (e.atk <= 0 && sees && !busy){ e.atk = 3.0; finalVolley(e, ux, uy, 2, .22, .85); }
     if (e.atk2 <= 0 && !e.dash && sees){
       e.atk2 = 4.8; e.dash = .6; e.ddx = ux; e.ddy = uy;
       beep("sawtooth", 70, .6, .3, 180);
     }
-    if (e.atk3 <= 0){ e.atk3 = 15; summonMinions(e, "imp", 2, 3); }
+    if (e.atk3 <= 0 && sees && !e.laser && !e.dash){ e.atk3 = 11; startBeam(e, "sweep"); }
+    e.atk4 = (e.atk4 === undefined ? 5 : e.atk4) - dt;
+    if (e.atk4 <= 0 && sees){
+      e.atk4 = 9;
+      if (enemies.filter(m => m.alive && m.paper).length < 2) throwOrder(e);
+    }
   } else {
     e.spin = (e.spin || 0) + dt * 2.3;
     e.spinT = (e.spinT || 0) - dt;
@@ -281,6 +292,117 @@ function finalAI(e, dt, d, ux, uy, mx, my, sees, frac){
       const f = blinkTarget(e, 5.5, 9);
       if (f) bossBlink(e, f.x, f.y);
     }
+  }
+}
+
+var beams = [];
+var PAPER_ORDER_TEXT = "ПРИКАЗ ОБ ОТЧИСЛЕНИИ";
+var PAPER_IMG = (() => {
+  const c = document.createElement("canvas"); c.width = c.height = 64;
+  const g = c.getContext("2d");
+  g.translate(32, 32); g.rotate(-.12);
+  g.fillStyle = "#f4efe2"; g.fillRect(-17, -22, 34, 44);
+  g.fillStyle = "#d8d0bc"; g.fillRect(-17, 19, 34, 3);
+  g.fillStyle = "#2a2622";
+  for (let i = 0; i < 7; i++) g.fillRect(-12, -16 + i*5, i === 0 ? 24 : 18 + (i*7 % 6), 2);
+  g.strokeStyle = "#b0141c"; g.lineWidth = 3;
+  g.beginPath(); g.arc(6, 11, 7, 0, Math.PI*2); g.stroke();
+  g.fillStyle = "#b0141c"; g.fillRect(1, 10, 10, 2);
+  return c;
+})();
+
+function rayLen(x0, y0, ang, max){
+  const dx = Math.cos(ang), dy = Math.sin(ang);
+  for (let s = .2; s < max; s += .1){ if (cell(x0 + dx*s, y0 + dy*s)) return s; }
+  return max;
+}
+
+function startBeam(e, kind){
+  const aim = Math.atan2(P.y - e.y, P.x - e.x);
+  const dir = Math.random() < .5 ? -1 : 1;
+  const b = {owner:e, kind, t:0, aimT:kind === "eyes" ? .85 : .95, fireT:kind === "eyes" ? .55 : 1.7,
+             ang:kind === "eyes" ? aim : aim - .9*dir, a0:aim - .9*dir, a1:aim + .9*dir, dP:Math.max(1.5, Math.hypot(P.x - e.x, P.y - e.y)),
+             tick:0, fired:false};
+  beams.push(b);
+  e.laser = b;
+  const a = atPos(e.x, e.y);
+  beep("sine", 260, .85, .16*a.vol, 1300, a.pan);
+}
+
+function beamPoints(b){
+  const e = b.owner, s = e.scale || 2.5;
+  const px = -Math.sin(b.ang), py = Math.cos(b.ang);
+  const eyeH = .5 - s + s * (23/64);
+  return [-.22, .22].map(o => ({x:e.x + px*o, y:e.y + py*o, h:eyeH}));
+}
+
+function updateBeams(dt){
+  let n = 0;
+  for (const b of beams){
+    const e = b.owner;
+    b.t += dt;
+    if (!e.alive || e.blink){ if (e.laser === b) e.laser = null; continue; }
+    const firing = b.t >= b.aimT;
+    if (!firing && b.kind === "eyes"){
+      const want = Math.atan2(P.y - e.y, P.x - e.x);
+      let d = want - b.ang; while (d > Math.PI) d -= 2*Math.PI; while (d < -Math.PI) d += 2*Math.PI;
+      b.ang += Math.max(-1.3*dt, Math.min(1.3*dt, d));
+      b.dP = Math.max(1.5, Math.hypot(P.x - e.x, P.y - e.y));
+    }
+    if (firing){
+      if (!b.fired){
+        b.fired = true;
+        const a = atPos(e.x, e.y);
+        beep("sawtooth", 95, b.fireT, .22*a.vol, 80, a.pan);
+        noiseBurst(Math.min(.6, b.fireT), .14*a.vol, 2600, .8, a.pan);
+      }
+      if (b.kind === "sweep") b.ang = b.a0 + (b.a1 - b.a0) * Math.min(1, (b.t - b.aimT) / b.fireT);
+      b.tick -= dt;
+      if (b.tick <= 0){
+        b.tick = .12;
+        for (const T of mpTargets()){
+          for (const p of beamPoints(b)){
+            const len = rayLen(p.x, p.y, b.ang, 30);
+            const dx = Math.cos(b.ang), dy = Math.sin(b.ang);
+            const qx = T.x - p.x, qy = T.y - p.y, s = qx*dx + qy*dy;
+            if (s > 0 && s < len && Math.abs(qx*dy - qy*dx) < .36){
+              if (T.peer) mpHurt(T.peer, 6 + dmgBonus()*.3, p.x, p.y); else damagePlayer(6 + dmgBonus()*.3, p.x, p.y);
+              break;
+            }
+          }
+        }
+      }
+    }
+    if (b.t >= b.aimT + b.fireT){ if (e.laser === b) e.laser = null; continue; }
+    beams[n++] = b;
+  }
+  beams.length = n;
+}
+
+function throwOrder(e){
+  const hp = 40 + Math.round(50 * bossLvl());
+  const ang = Math.atan2(P.y - e.y, P.x - e.x);
+  enemies.push({type:"imp", paper:true, minion:true, x:e.x + Math.cos(ang)*1.2, y:e.y + Math.sin(ang)*1.2,
+    hp, alive:true, t:0, life:7, cd:99, scale:.55, deadT:0, speed:2.1, stuck:0, slideT:0, slideDir:1,
+    seen:true, hurtT:0, voiceT:99, breathT:0, seeT:0, sees:false});
+  showBanner(PAPER_ORDER_TEXT, true, "сбей его, пока не догнал");
+  const a = atPos(e.x, e.y);
+  noiseBurst(.3, .12*a.vol, 5000, .8, a.pan);
+}
+
+function paperAI(e, dt){
+  e.life -= dt;
+  const dx = P.x - e.x, dy = P.y - e.y, d = Math.hypot(dx, dy) || 1;
+  if (e.life <= 0){ e.alive = false; e.deadT = 99; booms.push({x:e.x, y:e.y, t:.3}); return; }
+  let mx = dx/d, my = dy/d;
+  const f = flowDir(e);
+  if (f && !clearPath(e, d, mx, my)){ mx = f.x; my = f.y; }
+  moveEnemy(e, mx*e.speed*dt, my*e.speed*dt);
+  if (d < .55){
+    e.alive = false; e.deadT = 99;
+    if (!mpEffect("stun", 1.5)){ P.stunT = 1.5; P.slowT = Math.max(P.slowT || 0, 1.5); showBanner("ПОДПИСАНО", true, "полторы секунды без стрельбы"); }
+    damagePlayer(16 + dmgBonus()*.5, e.x, e.y);
+    beep("square", 180, .4, .2, 60);
   }
 }
 
@@ -354,8 +476,7 @@ function bossAI(e, dt, d, ux, uy, mx, my, sees){
     e.atk4 = (e.atk4 === undefined ? 3 : e.atk4) - dt;
     if (e.atk3 <= 0 && sees && d < 9){
       e.atk3 = 12 * bossRate();
-      P.slowT = 1.2;
-      showBanner("СВИСТОК!", true, "ноги ватные");
+      if (!mpEffect("slow", 1.2)){ P.slowT = 1.2; showBanner("СВИСТОК!", true, "ноги ватные"); }
       beep("sine", 2600, .5, .22*a.vol, 3100, a.pan);
       setTimeout(() => beep("sine", 2600, .35, .18*a.vol, 3000, a.pan), 550);
     }
@@ -454,6 +575,7 @@ function damageEnemy(e, dmg){
   e.hp -= dmg;
   e.hurtT = .14;
   if (e.hp > 0){ beep("triangle", e.boss ? 150 : 320, .07, .1); return; }
+  if (e.paper){ e.alive = false; e.deadT = 99; booms.push({x:e.x, y:e.y, t:.3}); noiseBurst(.2, .12, 4000, .8); return; }
   e.alive = false; e.deadT = 0; e.bloodT = 2.6;
   registerKill();
   if (e.boss){ bossDefeated(e); return; }
@@ -478,32 +600,8 @@ function falloff(g, d){
 }
 
 function hitscan(offset, dmg){
-  const a = P.a + offset;
-  const rx = Math.cos(a), ry = Math.sin(a);
-  const wallD = castRay(a);
-  const dirX = Math.cos(P.a), dirY = Math.sin(P.a);
-  const planeX = -dirY*CAM_PLANE, planeY = dirX*CAM_PLANE;
-  const invDet = 1 / (planeX*dirY - dirX*planeY);
-  const aimX = (W/2) * (1 + Math.tan(offset) / CAM_PLANE);
-  let best = null, bestT = 1e9;
-  for (const e of enemies){
-    if (!e.alive) continue;
-    const dx = e.x - P.x, dy = e.y - P.y;
-    const t = dx*rx + dy*ry;
-    if (t <= .05 || t > wallD) continue;
-    const ty = invDet*(-planeY*dx + planeX*dy);
-    if (ty <= .15) continue;
-    const tx = invDet*(dirY*dx - dirX*dy);
-    const screenX = (W/2) * (1 + tx/ty);
-    const half = Math.abs(H/ty) * (e.scale || KIND[e.type].scale) * .48;
-    if (Math.abs(screenX - aimX) > half) continue;
-    if (t < bestT){ bestT = t; best = e; }
-  }
-  if (!best) return;
-  const m = falloff(GUNS[gun], bestT);
-  if (m <= 0) return;
-  stat.hit++;
-  damageEnemy(best, dmg * m);
+  if (mpIsClient()){ mpFire(offset, dmg); return; }
+  if (hitscanAt(P.x, P.y, P.a, offset, dmg, gun, W, H, CAM_PLANE, castRay(P.a + offset))) stat.hit++;
 }
 
 var grenades = [], booms = [];
@@ -525,6 +623,7 @@ function explode(x, y){
 
 function shoot(){
   if (cooldown > 0 || !playing || wpnSwitch !== -1) return;
+  if (P.stunT > 0){ cooldown = .2; beep("square", 70, .05, .05); return; }
   const g = GUNS[gun];
   if (g.ammo && ammo[g.ammo] <= 0){ beep("square", 90, .08, .07); cooldown = .3; return; }
   if (g.ammo) ammo[g.ammo]--;
@@ -537,7 +636,8 @@ function shoot(){
   const mult = (BT.rage > 0 ? RAGE_MULT : 1) * skillMul();
   if (g.launcher){
     stat.fired++;
-    grenades.push({x:P.x + Math.cos(P.a)*.4, y:P.y + Math.sin(P.a)*.4,
+    if (mpIsClient()){ if (coop && coop.host) coopSend(coop.host.ch, {t:"gren", a:+P.a.toFixed(4)}); }
+    else grenades.push({x:P.x + Math.cos(P.a)*.4, y:P.y + Math.sin(P.a)*.4,
                    vx:Math.cos(P.a)*7, vy:Math.sin(P.a)*7, t:0,
                    sx:P.x, sy:P.y});
   } else {
@@ -572,6 +672,8 @@ function canSee(e){
 }
 
 function damagePlayer(amount, sx, sy){
+  if (mpTarget){ mpHurt(mpTarget, amount, sx, sy); return; }
+  if (P.dead) return;
   if (P.inv > 0 || god) return;
   if (BT.shield > 0) amount *= SHIELD_TAKE;
   if (sx !== undefined){
@@ -591,7 +693,7 @@ function damagePlayer(amount, sx, sy){
   updateHUD();
   if (P.hp <= 0 && god) P.hp = 100;
   if (P.hp <= 0 && lives > 0){ startRevive(); return; }
-  if (P.hp <= 0) gameOver();
+  if (P.hp <= 0){ if (mpActive()) mpDie(); else gameOver(); }
 }
 
 var voiceTokens = 4;
@@ -618,7 +720,7 @@ function update(dt){
 
   const sprint = gun === 0 && wpnSwitch === -1 ? 1.04 : 1;
   const sp = 2.7 * (BT.haste > 0 ? 1.28 : 1) * (P.slowT > 0 ? .7 : 1) * sprint * dt;
-  if (fw || st){
+  if ((fw || st) && !P.dead){
     const len = Math.hypot(fw, st) || 1;
     const f = fw/len, s = st/len;
     const bx = P.x, by = P.y;
@@ -632,7 +734,7 @@ function update(dt){
     }
   }
 
-  if (keys[" "] || mouseHeld || fireHeld) shoot();
+  if ((keys[" "] || mouseHeld || fireHeld) && !P.dead) shoot();
 
   cooldown = Math.max(0, cooldown - dt);
   recoil = Math.max(0, recoil - dt*3.5);
@@ -657,7 +759,9 @@ function update(dt){
 
   if (shake > 0) shake = Math.max(0, shake - dt*1.6);
   if (parts.length) updateParts(dt);
-  if (bossRef) supplyTick(dt);
+  if (beams.length && !mpIsClient()) updateBeams(dt);
+  if (P.stunT > 0) P.stunT -= dt;
+  if (bossRef && !mpIsClient()) supplyTick(dt);
   if (P.slowT > 0) P.slowT -= dt;
   runTime += dt;
   if (finalOutro){
@@ -703,7 +807,7 @@ function update(dt){
     else buffEl.classList.add("gone");
   }
 
-  for (const b of grenades){
+  if (!mpIsClient()) for (const b of grenades){
     b.t += dt;
     const ox = b.x, oy = b.y;
     b.x += b.vx*dt; b.y += b.vy*dt;
@@ -721,6 +825,7 @@ function update(dt){
   for (let i=grenades.length-1; i>=0; i--) if (grenades[i].dead) grenades.splice(i, 1);
   for (const e of booms) e.t += dt;
   for (let i=booms.length-1; i>=0; i--) if (booms[i].t > .45) booms.splice(i, 1);
+  if (mpIsClient()){ mpClientTick(dt); return; }
   P.pick = Math.max(0, P.pick - dt*2);
   HUD.hurt.style.opacity = P.hurt;
   HUD.pick.style.opacity = P.pick;
@@ -731,10 +836,13 @@ function update(dt){
 
   let aliveLeft = 0;
   for (const e of enemies){
+    if (mpTarget) mpRestore();
     if (e.hurtT > 0) e.hurtT -= dt;
     if (!e.alive){ e.deadT += dt; continue; }
     aliveLeft++;
     if (dbgFreeze) continue;
+    if (MP && MP.role === "host") mpSwapFor(e);
+    if (e.paper){ paperAI(e, dt); continue; }
     e.t += dt; e.cd -= dt;
     const k = KIND[e.type];
     const dx = P.x - e.x, dy = P.y - e.y;
@@ -855,6 +963,7 @@ function update(dt){
       } else if (e.slideT <= 0) e.stuck = 0;
     } else { e.stuck = 0; e.slideT = 0; }
   }
+  if (mpTarget) mpRestore();
 
   for (const e of enemies){
     if (!e.alive) continue;
@@ -922,8 +1031,14 @@ function update(dt){
     b.t += dt;
     const ox = b.x, oy = b.y;
     b.x += b.vx*dt; b.y += b.vy*dt;
-    if (segDist(P.x, P.y, ox, oy, b.x, b.y) < PR + (b.big ? .38 : .18)){
+    if (!P.dead && segDist(P.x, P.y, ox, oy, b.x, b.y) < PR + (b.big ? .38 : .18)){
       b.dead = true; damagePlayer(b.dmg || (FIREBALL_DMG + dmgBonus()), b.x, b.y);
+    } else if (mpIsHost()){
+      for (const p of mpPeers()){
+        if (p.gs.alive && segDist(p.gs.x, p.gs.y, ox, oy, b.x, b.y) < PR + (b.big ? .38 : .18)){
+          b.dead = true; mpHurt(p, b.dmg || (FIREBALL_DMG + dmgBonus()), b.x, b.y); break;
+        }
+      }
     } else if (solid(b.x, b.y, .1) || cell(b.x, b.y)) b.dead = true;
     if (b.t > 6) b.dead = true;
   }
@@ -935,6 +1050,7 @@ function update(dt){
 
   for (const it of items){
     it.t += dt;
+    if (P.dead) continue;
     const ix = it.x - P.x, iy = it.y - P.y;
     if (ix*ix + iy*iy > (PR + .38)*(PR + .38)) continue;
     let taken = true;
@@ -992,6 +1108,7 @@ function update(dt){
       updateHUD();
     }
   }
+  if (mpIsHost()) mpRemotePickups();
   {
     let j = 0;
     for (let i = 0; i < items.length; i++) if (!items[i].dead) items[j++] = items[i];
@@ -1002,7 +1119,7 @@ function update(dt){
 
   if (portal){
     portal.t += dt;
-    if (portal.t > .9 && Math.hypot(P.x - portal.x, P.y - portal.y) < .75){
+    if (portal.t > .9 && ((!P.dead && Math.hypot(P.x - portal.x, P.y - portal.y) < .75) || (mpIsHost() && mpNearPlayer(portal.x, portal.y, .75)))){
       portal = null;
       beep("sine", 900, .5, .2, 120);
       noiseBurst(.6, .2, 1800, .8);
@@ -1206,6 +1323,11 @@ function collectLights(){
   }
   for (const e of booms) addLight(e.x, e.y, 5.5, 1.5 * Math.max(0, 1 - e.t/.45), 4, .05);
   if (portal) addLight(portal.x, portal.y, 4.5, Math.min(1, portal.t / .9) * (1 + .15*Math.sin(clock*4)), 6, 0);
+  for (const b of beams){
+    if (b.t < b.aimT) continue;
+    const p = beamPoints(b)[0], len = rayLen(p.x, p.y, b.ang, 30), dx = Math.cos(b.ang), dy = Math.sin(b.ang);
+    for (let s = 1; s < len; s += 3) addLight(p.x + dx*s, p.y + dy*s, 2.6, .9, 1, 0);
+  }
 }
 
 function lightAt(x, y){
@@ -1368,7 +1490,14 @@ function render(){
     return o;
   };
 
+  if (mpActive()) mpAddPlayerSprites(addSprite);
   for (const e of enemies){
+    if (e.paper){
+      if (!e.alive) continue;
+      const po = addSprite(e.x, e.y, PAPER_IMG, .5, .02 + Math.sin(clock*6 + e.t)*.05);
+      if (po){ po.emit = true; po.hurt = e.hurtT > 0; }
+      continue;
+    }
     const k = KIND[e.type];
     const dead = !e.alive;
     const sc = e.scale || k.scale;
@@ -1380,7 +1509,10 @@ function render(){
       o.tint = e.tint || null;
       if (e.kind === "final" && !dead) o.minB = .6;
       if (e.blink) o.alpha = blinkAlpha(e);
+      else if (e.blinkA !== undefined && e.blinkA < 1) o.alpha = e.blinkA;
+      if (e.laserA > 0) o.tint = `rgba(255,40,30,${(.2 + .3 * e.laserA).toFixed(2)})`;
       if (e.charge > 0) o.tint = "rgba(215,150,255,.55)";
+      if (e.laser && e.laser.t < e.laser.aimT) o.tint = `rgba(255,40,30,${(.2 + .3 * e.laser.t / e.laser.aimT).toFixed(2)})`;
     }
     if (o){
       o.hurt = !dead && e.hurtT > 0;
@@ -1411,6 +1543,19 @@ function render(){
       if (cn){ cn.glow = 5; cn.glowA = .7 * L.val; }
       const g = addSprite(L.x + .5, L.y + .5, GLOW[5], .7, -.37);
       if (g){ g.glow = 5; g.glowA = .45 * L.val; }
+    }
+  }
+  for (const b of beams){
+    const firing = b.t >= b.aimT;
+    const dx = Math.cos(b.ang), dy = Math.sin(b.ang);
+    for (const p of beamPoints(b)){
+      const len = rayLen(p.x, p.y, b.ang, 30);
+      const step = firing ? .22 : .55;
+      for (let s = .5; s < len; s += step){
+        const h = p.h + (0 - p.h) * Math.min(1, s / b.dP);
+        const o = addSprite(p.x + dx*s, p.y + dy*s, GLOW[1], firing ? .3 : .11, h);
+        if (o){ o.glow = 1; o.glowA = firing ? .95 : .35 + .25*Math.sin(clock*20); }
+      }
     }
   }
   for (const p of parts){
