@@ -15,7 +15,7 @@ function mpPeers(){
   return out;
 }
 function coopN(){ return mpIsHost() ? 1 + mpPeers().length : 1; }
-var COOP_CURVE = {count:.4, hp:.12, boss:.65, mobDrop:.25, items:.6};
+var COOP_CURVE = {count:.25, hp:.08, boss:.55, mobDrop:.25, items:.6};
 var COOP_ENEMY_CAP = 60;
 function coopK(k){ return 1 + COOP_CURVE[k] * (coopN() - 1); }
 
@@ -157,9 +157,9 @@ function mpSnap(){
   const I = [];
   for (const it of items){ if (it.dead) continue; if (!it.id) it.id = ++MP.nid; I.push([it.id, it.kind, +it.x.toFixed(2), +it.y.toFixed(2)]); }
   const now = performance.now();
-  const PL = [[0, +P.x.toFixed(2), +P.y.toFixed(2), +P.a.toFixed(2), P.dead ? 0 : 1, gun, Math.min(999, Math.round(now - (MP.hostFireT || 0)))]];
+  const PL = [[0, +P.x.toFixed(2), +P.y.toFixed(2), +P.a.toFixed(2), P.dead ? 0 : 1, gun, Math.min(999, Math.round(now - (MP.hostFireT || 0))), Math.round(P.hp)]];
   for (const p of mpPeers()) PL.push([p.slot, +p.gs.x.toFixed(2), +p.gs.y.toFixed(2), +p.gs.a.toFixed(2), p.gs.alive ? 1 : 0,
-                                      p.gs.gun | 0, Math.min(999, Math.round(now - (p.gs.fireT || 0)))]);
+                                      p.gs.gun | 0, Math.min(999, Math.round(now - (p.gs.fireT || 0))), Math.round(p.gs.hp || 0)]);
   return {t:"snap", q:++MP.seq, L:level, left:enemiesLeft, E, I, PL,
     S:shots.map(b => [+b.x.toFixed(2), +b.y.toFixed(2), +b.vx.toFixed(2), +b.vy.toFixed(2), b.big ? 1 : 0]),
     G:grenades.map(g => [+g.x.toFixed(2), +g.y.toFixed(2), +g.vx.toFixed(2), +g.vy.toFixed(2)]),
@@ -232,6 +232,7 @@ function mpTick(dt){
   if (MP.pingT <= 0){ MP.pingT = .5; mpPingUpdate(); }
   MP.sendT -= dt;
   if (mpIsHost()){
+    mpRecordHist();
     MP.flowT -= dt;
     if (MP.flowT <= 0){ MP.flowT = .3; mpBuildFlows(); }
     if (MP.sendT <= 0){
@@ -258,6 +259,7 @@ function mpFire(offset, dmg){
 
 function mpDie(){
   P.dead = true; P.hp = 0; updateHUD();
+  P.hurt = 0; P.hitT = 0; shake = 0;
   fireHeld = false; mouseHeld = false;
   showBanner("ТЫ ПАЛ", true, "вернёшься на следующем этаже, если кто-то дойдёт");
   if (mpIsClient() && coop.host) coopSend(coop.host.ch, {t:"dead"});
@@ -308,9 +310,11 @@ function mpHostMsg(s, peer, m){
     const off = Math.max(-.3, Math.min(.3, +m.o || 0));
     const a = +m.a || 0;
     const nf = performance.now();
+    const saved = mpRewind(nf - Math.min(400, (peer.ping || 80) / 2 + 100));
     if (nf - (mpLastFx[peer.slot] || 0) > 70){ mpLastFx[peer.slot] = nf; peer.gs.fireT = nf; mpShotFx(peer.slot, peer.gs.x, peer.gs.y, a, gi); }
     hitscanAt(peer.gs.x, peer.gs.y, a, off, dmg, gi, peer.gs.W || 206, peer.gs.H || 430, peer.gs.pl || .66,
               rayLen(peer.gs.x, peer.gs.y, a + off, 40));
+    for (const [e, x, y] of saved){ e.x = x; e.y = y; }
   } else if (m.t === "gren" && peer.gs && peer.gs.alive){
     const a = +m.a || 0, x = peer.gs.x, y = peer.gs.y;
     peer.gs.fireT = performance.now(); mpShotFx(peer.slot, x, y, a, 3);
@@ -370,7 +374,8 @@ function mpHostStart(){
 function mpEnd(msg){
   if (!MP) return;
   const wasClient = MP.role === "client";
-  MP = null; mpTarget = null; mpRemote = []; mpEnt.clear(); P.dead = false; mpHideTags(); specGun = -1;
+  MP = null; mpTarget = null; mpRemote = []; mpEnt.clear(); P.dead = false; mpHideTags(); specGun = -1; specHp = -1;
+  document.body.classList.remove("spectating");
   document.getElementById("spectag").classList.add("gone"); document.getElementById("mpping").classList.add("gone");
   if (msg && playing){ quitToMenu(); showBanner(msg, true); }
   else if (msg && wasClient){ showBanner(msg, true); }
@@ -378,7 +383,8 @@ function mpEnd(msg){
 
 function mpQuit(){
   if (mpIsHost()) for (const p of mpPeers()) coopSend(p.ch, {t:"end"});
-  MP = null; mpTarget = null; mpRemote = []; mpEnt.clear(); P.dead = false; mpHideTags(); specGun = -1;
+  MP = null; mpTarget = null; mpRemote = []; mpEnt.clear(); P.dead = false; mpHideTags(); specGun = -1; specHp = -1;
+  document.body.classList.remove("spectating");
   document.getElementById("spectag").classList.add("gone"); document.getElementById("mpping").classList.add("gone");
 }
 
@@ -388,11 +394,14 @@ function shirtShade(hex, k){
   return `rgb(${(((n >> 16) & 255) * k) | 0},${(((n >> 8) & 255) * k) | 0},${((n & 255) * k) | 0})`;
 }
 var STUDENT_SCALE = .94, STUDENT_Y = .5 - .94/2;
-function studentFrames(slot){
-  if (STUDENT_FRAMES[slot]) return STUDENT_FRAMES[slot];
-  const shirt = SHIRTS[slot] || SHIRT_DEFAULT, sleeve = shirtShade(shirt, .8), shirtDk = shirtShade(shirt, .65);
-  const skin = "#d8a06a", shade = "#b8834f", hair = "#3a2a1c", hairHi = "#4a382c", dark = "#20140c", white = "#f2ece0";
+function studentFrames(slot, gi){
+  gi = gi | 0;
+  const key = slot + ":" + gi;
+  if (STUDENT_FRAMES[key]) return STUDENT_FRAMES[key];
+  const shirt = SHIRTS[slot] || SHIRT_DEFAULT, sleeve = shirtShade(shirt, .8), sleeveDk = shirtShade(shirt, .62), shirtDk = shirtShade(shirt, .65);
+  const skin = "#d8a06a", skinDk = "#b8834f", shade = "#b8834f", hair = "#3a2a1c", hairHi = "#4a382c", dark = "#20140c";
   const collar = "#c9c0a8", pants = "#262a36", pantsDk = "#1a1d26", shoe = "#141210";
+  const steel = "#6b717c", steelHi = "#a3aab6", black = "#1b1c20", wood = "#8a5a2c", olive = "#5f7045", oliveHi = "#83975f";
   const HX = 28, HY = 4;
   const mk = (draw, mirror) => {
     const c = document.createElement("canvas"); c.width = c.height = 96;
@@ -403,77 +412,110 @@ function studentFrames(slot){
     draw(px, hp, g);
     return c;
   };
-  const frontBody = (px, f, back) => {
+  const flash = (px, x, y, r) => {
+    px(x - r, y - 1, r*2, 3, "#ffd27a"); px(x - 1, y - r, 3, r*2, "#ffd27a");
+    px(x - r + 2, y - r + 2, r*2 - 4, r*2 - 4, "#ff9a3c"); px(x - 2, y - 2, 4, 4, "#fff4c8");
+  };
+  const legsFront = (px, f) => {
     const lL = f === 0 ? 3 : 0, lR = f === 2 ? 3 : 0;
-    const aL = f === 0 ? 2 : f === 2 ? -2 : 0, aR = -aL;
-    px(27, 46 + aL, 6, 20, sleeve); px(27, 66 + aL, 6, 4, skin);
-    px(63, 46 + aR, 6, 20, sleeve); px(63, 66 + aR, 6, 4, skin);
-    px(32, 44, 32, 26, shirt);
-    px(32, 66, 32, 4, shirtDk);
-    if (!back) px(42, 44, 12, 4, collar);
     px(34, 70, 28, 6, pants);
     px(35, 76, 11, 14 - lL, pants); px(50, 76, 11, 14 - lR, pants);
     px(34, 90 - lL, 13, 6, shoe); px(49, 90 - lR, 13, 6, shoe);
   };
-  const frontFrame = f => {
-    const c = document.createElement("canvas"); c.width = c.height = 96;
-    const g = c.getContext("2d"); g.imageSmoothingEnabled = false;
-    const px = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
-    frontBody(px, f, false);
-    const keep = shirtColor;
-    shirtColor = shirt;
+  const torsoFront = (px, back) => {
+    px(32, 44, 32, 26, shirt); px(32, 66, 32, 4, shirtDk);
+    if (!back) px(42, 44, 12, 4, collar);
+  };
+  const gunFront = (px, b, fire) => {
+    const y = 55 + b - (fire ? 2 : 0);
+    px(30, 46, 6, 10, sleeve); px(60, 46, 6, 10, sleeve);
+    px(34, y - 1, 10, 6, sleeve); px(52, y - 1, 10, 6, sleeve);
+    if (gi === 0){ px(43, y - 2, 10, 8, steel); px(45, y, 6, 4, black); }
+    else if (gi === 1){ px(40, y - 4, 16, 11, wood); px(41, y - 3, 6, 6, steel); px(49, y - 3, 6, 6, steel); px(42, y - 2, 4, 4, black); px(50, y - 2, 4, 4, black); }
+    else if (gi === 2){ px(38, y - 6, 20, 14, steel); px(40, y - 5, 16, 2, steelHi); px(44, y - 2, 8, 7, black); }
+    else { px(38, y - 10, 20, 20, olive); px(38, y - 10, 20, 2, oliveHi); px(42, y - 6, 12, 12, black); }
+    px(41, y + 4, 5, 4, skin); px(50, y + 4, 5, 4, skin);
+    if (fire) flash(px, 48, y, gi === 3 ? 10 : gi === 1 ? 9 : 7);
+  };
+  const front = (f, fire) => mk(px => {
+    legsFront(px, f); torsoFront(px, false);
+    const keep = shirtColor; shirtColor = shirt;
     paintFace({mood:"calm", dmg:0, dir:0, blink:false});
     shirtColor = keep;
+    const b = (f === 1 || f === 3) ? 1 : 0;
+    gunFront(px, b, fire);
+    return px;
+  });
+  const frontFrame = (f, fire) => {
+    const c = front(f, fire), g = c.getContext("2d");
+    g.imageSmoothingEnabled = false;
     g.drawImage(faceCv, 0, 0, 40, 40, HX, HY, 40, 40);
-    px(42, 44, 12, 4, collar);
+    g.fillStyle = collar; g.fillRect(42, 44, 12, 4);
+    const b = (f === 1 || f === 3) ? 1 : 0;
+    const px = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+    gunFront(px, b, fire);
     return c;
   };
-  const back = f => mk((px, hp) => {
-    frontBody(px, f, true);
+  const back = (f, fire) => mk((px, hp) => {
+    legsFront(px, f); torsoFront(px, true);
+    const b = (f === 1 || f === 3) ? 1 : 0, r = fire ? 1 : 0;
+    px(29, 46 + b - r, 6, 12, sleeve); px(61, 46 + b - r, 6, 12, sleeve);
+    px(31, 56 + b - r, 5, 3, sleeveDk); px(60, 56 + b - r, 5, 3, sleeveDk);
+    if (gi > 0) px(64, 49 + b - r, gi === 3 ? 10 : 7, gi === 3 ? 7 : 4, gi === 3 ? olive : steel);
     hp(15, 34, 10, 8, shade);
+    hp(7, 6, 26, 32, skin); hp(7, 34, 26, 4, shade);
     hp(5, 16, 2, 8, skin); hp(33, 16, 2, 8, skin);
-    hp(7, 6, 26, 32, skin);
-    hp(7, 34, 26, 4, shade);
     hp(7, 5, 26, 24, hair);
     hp(6, 3, 28, 8, hair); hp(6, 3, 28, 2, hairHi);
     hp(6, 11, 2, 14, hair); hp(32, 11, 2, 14, hair);
     for (let i = 0; i < 5; i++) hp(9 + i*5, 28, 3, 3, hair);
     hp(8, 17, 24, 1, "#2e2116"); hp(10, 23, 20, 1, "#2e2116");
   });
-  const side = (f, mirror) => mk((px, hp) => {
-    const st = [5, 0, -5, 0][f], sw = [-4, 0, 4, 0][f];
+  const side = (f, fire, mirror) => mk((px, hp) => {
+    const st = [5, 0, -5, 0][f], b = (f === 1 || f === 3) ? 1 : 0, rc = fire ? -3 : 0;
     px(42 - st, 76, 11, 14, pantsDk); px(42 - st, 90, 14, 6, shoe);
+    px(47 + rc, 55 + b, 14, 4, sleeveDk); px(60 + rc, 55 + b, 4, 4, skinDk);
     px(38, 44, 22, 26, shirt); px(38, 66, 22, 4, shirtDk);
     px(40, 70, 18, 6, pants);
     px(42 + st, 76, 11, 14, pants); px(42 + st, 90, 14, 6, shoe);
-    px(45 + sw, 46, 7, 20, sleeve); px(45 + sw, 66, 7, 4, skin);
     hp(16, 34, 9, 8, shade);
-    hp(9, 6, 24, 32, skin);
-    hp(9, 34, 24, 4, shade);
+    hp(9, 6, 24, 32, skin); hp(9, 34, 24, 4, shade);
     hp(31, 21, 3, 6, skin); hp(31, 26, 3, 1, shade);
     hp(8, 3, 25, 8, hair); hp(8, 3, 25, 2, hairHi);
     hp(8, 3, 10, 22, hair); hp(9, 25, 3, 3, hair); hp(13, 25, 3, 3, hair);
     hp(19, 10, 3, 3, hair); hp(24, 10, 3, 3, hair); hp(29, 10, 3, 3, hair);
     hp(17, 16, 3, 8, shade); hp(18, 17, 1, 6, skin);
     hp(24, 14, 6, 2, hair);
-    hp(24, 18, 6, 5, white); hp(27, 19, 2, 3, dark);
-    hp(24, 24, 6, 1, shade);
-    hp(26, 30, 6, 2, dark);
+    hp(24, 18, 6, 5, "#f2ece0"); hp(27, 19, 2, 3, dark);
+    hp(24, 24, 6, 1, shade); hp(26, 30, 6, 2, dark);
+    const y = 50 + b, x = 58 + rc;
+    let tip;
+    if (gi === 0){ px(x + 2, y - 1, 12, 5, steel); px(x + 2, y - 1, 12, 1, steelHi); px(x + 4, y + 4, 4, 6, steel); tip = x + 14; }
+    else if (gi === 1){ px(x - 4, y + 1, 9, 6, wood); px(x + 2, y - 1, 26, 4, steel); px(x + 2, y - 1, 26, 1, steelHi); px(x + 10, y + 3, 9, 3, wood); tip = x + 28; }
+    else if (gi === 2){ px(x - 4, y - 2, 28, 7, steel); px(x - 2, y - 2, 24, 2, steelHi); px(x + 6, y + 5, 5, 8, black); px(x + 24, y, 6, 3, steel); tip = x + 30; }
+    else { px(x - 8, y - 5, 36, 10, olive); px(x - 8, y - 5, 36, 2, oliveHi); px(x + 26, y - 4, 3, 8, black); tip = x + 29; }
+    px(42, 47, 7, 9, sleeve); px(46, 51 + b, 14 + rc, 5, sleeve); px(58 + rc, 50 + b, 5, 7, skin);
+    if (fire) flash(px, tip + 4, y + 1, gi === 3 ? 8 : gi === 1 ? 7 : 5);
   }, mirror);
   const F = {front:[], back:[], right:[], left:[]};
-  for (let f = 0; f < 4; f++){ F.front.push(frontFrame(f)); F.back.push(back(f)); F.right.push(side(f, false)); F.left.push(side(f, true)); }
+  for (let f = 0; f < 4; f++){
+    F.front.push(frontFrame(f, false)); F.back.push(back(f, false));
+    F.right.push(side(f, false, false)); F.left.push(side(f, false, true));
+  }
+  F.frontFire = frontFrame(1, true); F.backFire = back(1, true);
+  F.rightFire = side(1, true, false); F.leftFire = side(1, true, true);
   faceKey = "";
-  STUDENT_FRAMES[slot] = F;
+  STUDENT_FRAMES[key] = F;
   return F;
 }
 
 var mpVis = {}, mpTagEls = {};
 function mpPlayerList(){
   if (mpIsHost()) return mpPeers().filter(p => p.gs.alive && p.gs.x !== undefined)
-    .map(p => ({slot:p.slot, x:p.gs.x, y:p.gs.y, a:p.gs.a || 0, name:p.name, gun:p.gs.gun | 0}));
+    .map(p => ({slot:p.slot, x:p.gs.x, y:p.gs.y, a:p.gs.a || 0, name:p.name, gun:p.gs.gun | 0, hp:p.gs.hp || 0}));
   return mpRemote.filter(p => p[4]).map(p => {
     const pl = coop && coop.players.find(q => q.slot === p[0]);
-    return {slot:p[0], x:p[1], y:p[2], a:p[3], name:pl ? pl.name : "", gun:p[5] | 0};
+    return {slot:p[0], x:p[1], y:p[2], a:p[3], name:pl ? pl.name : "", gun:p[5] | 0, hp:typeof p[7] === "number" ? p[7] : 100};
   });
 }
 function mpTagEl(slot){
@@ -508,16 +550,15 @@ function mpAddPlayerSprites(addSprite){
     const tvx = P.x - v.x, tvy = P.y - v.y, tl = Math.hypot(tvx, tvy) || 1;
     const dFront = (fx*tvx + fy*tvy) / tl;
     if (P.dead && r.slot === MP.specSlot) continue;
-    const F = studentFrames(r.slot);
+    const F = studentFrames(r.slot, r.gun);
     let view;
     if (dFront > .55) view = "front";
     else if (dFront < -.55) view = "back";
     else view = (fx*(-dirY) + fy*dirX) > 0 ? "right" : "left";
     v.view = view;
-    const o = addSprite(v.x, v.y, F[view][frame], STUDENT_SCALE, STUDENT_Y);
+    const fired = now - (mpLastFx[r.slot] || 0) < 110;
+    const o = addSprite(v.x, v.y, fired ? F[view + "Fire"] : F[view][frame], STUDENT_SCALE, STUDENT_Y);
     if (o) o.minB = .5;
-    const wo = addSprite(v.x + tvx/tl*.03, v.y + tvy/tl*.03, weaponOverlay(r.slot, r.gun | 0, view), STUDENT_SCALE, STUDENT_Y);
-    if (wo) wo.minB = .5;
 
     const dx = v.x - P.x, dy = v.y - P.y, dist = Math.hypot(dx, dy);
     const ty = inv*(-planeY*dx + planeX*dy), tx = inv*(dirY*dx - dirX*dy);
@@ -534,7 +575,7 @@ function mpAddPlayerSprites(addSprite){
   }
   for (const k in mpTagEls) if (!shown.has(k)) mpTagEls[k].style.display = "none";
   for (const f of mpFlashes){
-    const fo = addSprite(f.x, f.y, GLOW[0], f.big ? .55 : .38, STUDENT_Y - .1);
+    const fo = addSprite(f.x, f.y, GLOW[0], f.big ? .4 : .28, STUDENT_Y - .1);
     if (fo){ fo.glow = 0; fo.glowA = Math.max(0, 1 - f.t / .09); }
   }
 }
@@ -611,6 +652,12 @@ function weaponOverlay(slot, gi, view){
 }
 
 function mpShotFx(slot, x, y, a, gi){
+  if (P.dead && slot === MP.specSlot){
+    flash = gi === 3 ? 0 : 1; recoil = 1; playFireAnim();
+    const g = GUNS[gi] || GUNS[0];
+    beep("square", g.snd[0], g.snd[1], g.snd[2]);
+    return;
+  }
   mpFlashes.push({x:x + Math.cos(a)*.5, y:y + Math.sin(a)*.5, t:0, big:gi === 1 || gi === 3});
   const au = atPos(x, y), g = GUNS[gi] || GUNS[0];
   beep("square", g.snd[0], g.snd[1], g.snd[2] * .55 * au.vol, undefined, au.pan);
@@ -634,17 +681,23 @@ function mpSpecNext(){
 }
 function mpSpecStep(){
   const tag = document.getElementById("spectag");
+  document.body.classList.toggle("spectating", !!P.dead);
   if (!P.dead){
-    if (MP.specSlot !== undefined && MP.specSlot !== null){ MP.specSlot = null; specGun = -1; }
+    if (MP.specSlot !== undefined && MP.specSlot !== null){ MP.specSlot = null; specGun = -1; specHp = -1; }
     tag.classList.add("gone");
     return;
   }
+  P.hurt = 0; P.hitT = 0;
   const list = mpSpecTargets();
   if (!list.length){ tag.textContent = "ВСЕ ПАЛИ…"; tag.classList.remove("gone"); specGun = -1; return; }
   let t = list.find(r => r.slot === MP.specSlot);
   if (!t){ t = list[0]; MP.specSlot = t.slot; }
   const v = mpVis[t.slot];
-  P.x = v ? v.x : t.x; P.y = v ? v.y : t.y;
+  const nx = v ? v.x : t.x, ny = v ? v.y : t.y;
+  const mv = Math.hypot(nx - P.x, ny - P.y);
+  if (mv < 1) bobPhase += mv * 5.2;
+  P.x = nx; P.y = ny;
+  specHp = t.hp;
   let d = t.a - P.a; while (d > Math.PI) d -= 2*Math.PI; while (d < -Math.PI) d += 2*Math.PI;
   P.a += d * .35;
   specGun = t.gun | 0;
@@ -667,3 +720,30 @@ function mpPingUpdate(){
   const w = document.getElementById("wrap");
   if (w) w.addEventListener("pointerdown", next, true);
 })();
+
+function mpRecordHist(){
+  const t = performance.now();
+  for (const e of enemies){
+    if (!e.alive) continue;
+    const h = e.hist || (e.hist = []);
+    h.push(t, e.x, e.y);
+    while (h.length > 6 && t - h[0] > 700) h.splice(0, 3);
+  }
+}
+function mpRewind(t){
+  const saved = [];
+  for (const e of enemies){
+    if (!e.alive || !e.hist || e.hist.length < 6) continue;
+    const h = e.hist;
+    let i = 0;
+    while (i + 3 < h.length && h[i + 3] <= t) i += 3;
+    let x = h[i + 1], y = h[i + 2];
+    if (i + 3 < h.length && h[i] < t){
+      const k = Math.max(0, Math.min(1, (t - h[i]) / Math.max(1, h[i + 3] - h[i])));
+      x += (h[i + 4] - x) * k; y += (h[i + 5] - y) * k;
+    }
+    saved.push([e, e.x, e.y]);
+    e.x = x; e.y = y;
+  }
+  return saved;
+}

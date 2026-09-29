@@ -22,7 +22,7 @@ var COOP_ICE = [
 ];
 var COOP_TURN_APP = ["doom", "for", "akt"].join("");
 var COOP_TURN_KEY = ((d, k) => d.map((b, i) => String.fromCharCode(b ^ k.charCodeAt(i % k.length) ^ ((i * 7) & 31))).join(""))(
-  [33,43,58,71,42,23,34,41,91,8,70,27,10,76,67,16,52,52,11,67,10,119,43,120,30,35,19,9,4,36,67,40,102,10,63,20,8,58,45,82,13,117,51,13,11,70,65,37], ["ptu3d", "-akt"].join(""));
+  [17,65,72,69,76,24,10,24,8,12,67,74,67,79,73,14,31,80,10,69,76,68,26,27,13,83,7,88,65,76,66,25,78,5,82,84], ["ptu3d", "-akt"].join(""));
 var coopTurn = null, coopTurnTried = false;
 function coopIce(){ return coopTurn && coop && coop.role === "client" && (coop.tries || 0) >= 1 ? COOP_ICE.concat(coopTurn) : COOP_ICE; }
 function coopLoadTurn(){
@@ -275,7 +275,7 @@ async function makeOffers(s, n){
     const ch = pc.createDataChannel("g", {ordered:true});
     const fch = pc.createDataChannel("f", {ordered:false, maxRetransmits:0});
     await pc.setLocalDescription(await pc.createOffer());
-    await waitIce(pc, 1500);
+    await waitIce(pc, (s.tries || 0) >= 1 && coopTurn ? 3500 : 1500);
     const id = rid(20);
     s.pending.set(id, {pc, ch, fch, t:performance.now()});
     const sdp = pc.localDescription.sdp;

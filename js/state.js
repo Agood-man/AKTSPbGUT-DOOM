@@ -45,7 +45,7 @@ function ambience(dt){
     else if (r < .7) beep("sawtooth", 60 + Math.random()*40, 1.1, .05, 32);
     else noiseBurst(.9, .05, 500, .6);
   }
-  if (P.hp < 28 && playing){
+  if (viewHp() < 28 && playing){
     gaspT -= dt;
     if (gaspT <= 0){
       gaspT = 1.1 + Math.random()*.6;
@@ -53,10 +53,10 @@ function ambience(dt){
       setTimeout(() => noiseBurst(.22, .06, 480, .6), 330);
     }
   }
-  if (P.hp < 40 && playing){
+  if (viewHp() < 40 && playing){
     heartT -= dt;
     if (heartT <= 0){
-      heartT = .45 + (P.hp/40)*.55;
+      heartT = .45 + (viewHp()/40)*.55;
       beep("sine", 62, .14, .16, 40);
       setTimeout(() => beep("sine", 55, .12, .11, 38), 150);
     }

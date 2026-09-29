@@ -6,7 +6,8 @@ function mpActive(){ return false; }
 function mpIsHost(){ return false; }
 function mpIsClient(){ return false; }
 function coopN(){ return 1; }
-var specGun = -1;
+var specGun = -1, specHp = -1;
+function viewHp(){ return P.dead ? (specHp >= 0 ? specHp : 100) : P.hp; }
 function coopK(){ return 1; }
 var SET_KEY = "terplandia3d.settings";
 var CTRL_KEYS = ["stick", "fire", "swap", "pausebtn", "minimap", "invbar"];

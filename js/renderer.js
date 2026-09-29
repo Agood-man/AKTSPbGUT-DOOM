@@ -751,7 +751,7 @@ function update(dt){
   if (backT > 0) backT -= dt;
   ambience(dt);
   updateFace(dt);
-  const low = P.hp < 40 ? (1 - P.hp/40) : 0;
+  const vh = viewHp(), low = vh < 40 ? (1 - vh/40) : 0;
   HUD.lowhp.style.opacity =
     low ? (low * (.45 + .3*Math.sin(clock*6))).toFixed(2) : 0;
 
@@ -1371,7 +1371,7 @@ for (let i = 0; i < 256; i++){
 function render(){
   const dirX = Math.cos(P.a), dirY = Math.sin(P.a);
   const planeX = -dirY*CAM_PLANE, planeY = dirX*CAM_PLANE;
-  const shakeAmp = (P.hp < 45 ? (1 - P.hp/45)*2.2 : 0) + (P.hitT > 0 ? P.hitT*9 : 0) + shake*6;
+  const shakeAmp = (viewHp() < 45 ? (1 - viewHp()/45)*2.2 : 0) + (P.hitT > 0 ? P.hitT*9 : 0) + shake*6;
   const horizon = H*.5 + (shakeAmp ? Math.sin(clock*17)*shakeAmp + (Math.random()-.5)*shakeAmp*.6 : 0);
 
   if (fogGamma !== SET.gamma) buildFogLUT(SET.gamma);
