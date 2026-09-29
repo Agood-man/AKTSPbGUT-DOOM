@@ -1,4 +1,4 @@
-# AKTSPbGUT-DOOM
+# ПТУ 3D
 аыаыаыаыаайы
 
 >[!NOTE]
