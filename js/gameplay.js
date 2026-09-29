@@ -8,7 +8,7 @@ function saveGame(){
     bullets:ammo.bullets, shells:ammo.shells, grenades:ammo.grenades,
     guns:unlocked.reduce((m, v, i) => m | (v ? 1 << i : 0), 0),
     inv:[inv.rage, inv.haste, inv.shield],
-    lives, lifeDrops, streak:bestStreak, seedCustom, skill, bossKills,
+    lives, lifeDrops, streak:bestStreak, seedCustom, skill, bossKills, buffDry,
     time:Math.round(runTime)
   }));
 }
@@ -82,6 +82,7 @@ var INV_TIME = .45;
 var enemies = [], items = [], shots = [];
 var ammo = {bullets:45, shells:10, grenades:0};
 var AMMO_SOFT = {bullets:350, shells:55, grenades:25};
+var buffDry = 0;
 function giveAmmo(kind, n){ ammo[kind] += n; return true; }
 function stockFactor(kind){
   if (isBossLevel()) return 1;
@@ -712,10 +713,16 @@ function nextLevel(){
     gunHint = `НА ЭТАЖЕ: ${GUNS[n].name}`;
     break;
   }
-  for (let r = 0; r < coopN(); r++) if (level >= 5 && Math.random() < .4){
-    const k = randomBuff();
-    const b = freeCell(5);
-    items.push({kind:k, x:b.x, y:b.y, t:0});
+  if (level >= 5 && !isBossLevel()){
+    let spawned = 0;
+    for (let r = 0; r < coopN(); r++){
+      if (Math.random() < .4 || (r === 0 && buffDry >= 3)){
+        const b = freeCell(5);
+        items.push({kind:randomBuff(), x:b.x, y:b.y, t:0});
+        spawned++;
+      }
+    }
+    buffDry = spawned ? 0 : buffDry + 1;
   }
   for (let r = 0; r < coopN(); r++) if (level >= 8 && unlocked[3] && Math.random() < .5 * stockFactor("grenades")){
     const gr = freeCell(4);
@@ -783,7 +790,7 @@ function reset(seed){
   unlocked = [true, false, false, false];
   gun = 0; kills = 0; level = 0;
   for (const k in BT){ BT[k] = 0; inv[k] = 0; }
-  runTime = 0; lives = 0; lifeDrops = 0; bestStreak = 0; skill = 0; bossKills = 0;
+  runTime = 0; lives = 0; lifeDrops = 0; bestStreak = 0; skill = 0; bossKills = 0; buffDry = 0;
   buffShownKey = "";
   combo = 0; comboT = 0;
   grenades.length = 0; booms.length = 0;

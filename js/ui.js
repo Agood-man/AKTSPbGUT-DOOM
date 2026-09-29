@@ -323,6 +323,7 @@ function beginRun(sv){
       bossKills = Math.round(Math.log(1 - old / SKILL_CAP) / Math.log(SKILL_DECAY));
     }
     skill = skillFor(bossKills);
+    buffDry = Math.max(0, Math.min(10, num(sv.buffDry, 0) | 0));
     if (Array.isArray(sv.inv)){
       inv.rage = Math.min(INV_MAX, num(sv.inv[0], 0) | 0);
       inv.haste = Math.min(INV_MAX, num(sv.inv[1], 0) | 0);

@@ -363,52 +363,82 @@ function shirtShade(hex, k){
   const n = parseInt(hex.slice(1), 16);
   return `rgb(${(((n >> 16) & 255) * k) | 0},${(((n >> 8) & 255) * k) | 0},${((n & 255) * k) | 0})`;
 }
+var STUDENT_SCALE = .94, STUDENT_Y = .5 - .94/2;
 function studentFrames(slot){
   if (STUDENT_FRAMES[slot]) return STUDENT_FRAMES[slot];
-  const shirt = SHIRTS[slot] || SHIRT_DEFAULT, sleeve = shirtShade(shirt, .78);
-  const skin = "#d8a06a", hair = "#3a2a1c", pants = "#262a36", pantsFar = "#1a1d26", shoe = "#141210", dark = "#20140c", lip = "#8a4f30";
+  const shirt = SHIRTS[slot] || SHIRT_DEFAULT, sleeve = shirtShade(shirt, .8), shirtDk = shirtShade(shirt, .65);
+  const skin = "#d8a06a", shade = "#b8834f", hair = "#3a2a1c", hairHi = "#4a382c", dark = "#20140c", white = "#f2ece0";
+  const collar = "#c9c0a8", pants = "#262a36", pantsDk = "#1a1d26", shoe = "#141210";
+  const HX = 28, HY = 4;
   const mk = (draw, mirror) => {
-    const c = document.createElement("canvas"); c.width = c.height = 64;
-    const g = c.getContext("2d");
-    if (mirror){ g.translate(64, 0); g.scale(-1, 1); }
-    draw((x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x*2, y*2 + 4, w*2, h*2); });
+    const c = document.createElement("canvas"); c.width = c.height = 96;
+    const g = c.getContext("2d"); g.imageSmoothingEnabled = false;
+    if (mirror){ g.translate(96, 0); g.scale(-1, 1); }
+    const px = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+    const hp = (x, y, w, h, col) => px(x + HX, y + HY, w, h, col);
+    draw(px, hp, g);
     return c;
   };
-  const body = (px, f, back) => {
-    const lL = f === 0 ? 2 : 0, lR = f === 2 ? 2 : 0;
-    const aL = f === 2 ? -1 : f === 0 ? 1 : 0, aR = -aL;
-    px(10, 10, 12, 8, shirt);
-    if (!back) px(14, 10, 4, 1, "#f2ece0");
-    px(8, 10 + aL, 2, 7, sleeve); px(8, 17 + aL, 2, 1, skin);
-    px(22, 10 + aR, 2, 7, sleeve); px(22, 17 + aR, 2, 1, skin);
-    px(10, 18, 12, 3, pants);
-    px(11, 21, 4, 7 - lL, pants); px(17, 21, 4, 7 - lR, pants);
-    px(10, 28 - lL, 5, 2, shoe); px(17, 28 - lR, 5, 2, shoe);
+  const frontBody = (px, f, back) => {
+    const lL = f === 0 ? 3 : 0, lR = f === 2 ? 3 : 0;
+    const aL = f === 0 ? 2 : f === 2 ? -2 : 0, aR = -aL;
+    px(27, 46 + aL, 6, 20, sleeve); px(27, 66 + aL, 6, 4, skin);
+    px(63, 46 + aR, 6, 20, sleeve); px(63, 66 + aR, 6, 4, skin);
+    px(32, 44, 32, 26, shirt);
+    px(32, 66, 32, 4, shirtDk);
+    if (!back) px(42, 44, 12, 4, collar);
+    px(34, 70, 28, 6, pants);
+    px(35, 76, 11, 14 - lL, pants); px(50, 76, 11, 14 - lR, pants);
+    px(34, 90 - lL, 13, 6, shoe); px(49, 90 - lR, 13, 6, shoe);
   };
-  const front = f => mk(px => {
-    px(11, 0, 10, 3, hair); px(10, 2, 1, 4, hair); px(21, 2, 1, 4, hair);
-    px(11, 3, 10, 6, skin); px(13, 5, 2, 1, dark); px(17, 5, 2, 1, dark); px(14, 7, 4, 1, lip);
-    px(14, 9, 4, 1, skin);
-    body(px, f, false);
+  const frontFrame = f => {
+    const c = document.createElement("canvas"); c.width = c.height = 96;
+    const g = c.getContext("2d"); g.imageSmoothingEnabled = false;
+    const px = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+    frontBody(px, f, false);
+    const keep = shirtColor;
+    shirtColor = shirt;
+    paintFace({mood:"calm", dmg:0, dir:0, blink:false});
+    shirtColor = keep;
+    g.drawImage(faceCv, 0, 0, 40, 40, HX, HY, 40, 40);
+    px(42, 44, 12, 4, collar);
+    return c;
+  };
+  const back = f => mk((px, hp) => {
+    frontBody(px, f, true);
+    hp(15, 34, 10, 8, shade);
+    hp(5, 16, 2, 8, skin); hp(33, 16, 2, 8, skin);
+    hp(7, 6, 26, 32, skin);
+    hp(7, 34, 26, 4, shade);
+    hp(7, 5, 26, 24, hair);
+    hp(6, 3, 28, 8, hair); hp(6, 3, 28, 2, hairHi);
+    hp(6, 11, 2, 14, hair); hp(32, 11, 2, 14, hair);
+    for (let i = 0; i < 5; i++) hp(9 + i*5, 28, 3, 3, hair);
+    hp(8, 17, 24, 1, "#2e2116"); hp(10, 23, 20, 1, "#2e2116");
   });
-  const back = f => mk(px => {
-    px(11, 0, 10, 9, hair); px(10, 4, 1, 2, skin); px(21, 4, 1, 2, skin);
-    px(14, 9, 4, 1, skin);
-    body(px, f, true);
-  });
-  const side = (f, mirror) => mk(px => {
-    const st = [3, 0, -3, 0][f], sw = [-2, 0, 2, 0][f];
-    px(15 - st, 21, 3, 7, pantsFar); px(15 - st, 28, 4, 2, shoe);
-    px(12, 0, 8, 3, hair); px(12, 3, 3, 5, hair);
-    px(15, 3, 6, 6, skin); px(19, 5, 1, 1, dark); px(21, 5, 1, 1, skin); px(19, 7, 2, 1, lip);
-    px(15, 9, 3, 1, skin);
-    px(13, 10, 7, 8, shirt);
-    px(13, 18, 7, 3, pants);
-    px(15 + st, 21, 3, 7, pants); px(15 + st, 28, 4, 2, shoe);
-    px(15 + sw, 11, 3, 6, sleeve); px(15 + sw, 17, 3, 1, skin);
+  const side = (f, mirror) => mk((px, hp) => {
+    const st = [5, 0, -5, 0][f], sw = [-4, 0, 4, 0][f];
+    px(42 - st, 76, 11, 14, pantsDk); px(42 - st, 90, 14, 6, shoe);
+    px(38, 44, 22, 26, shirt); px(38, 66, 22, 4, shirtDk);
+    px(40, 70, 18, 6, pants);
+    px(42 + st, 76, 11, 14, pants); px(42 + st, 90, 14, 6, shoe);
+    px(45 + sw, 46, 7, 20, sleeve); px(45 + sw, 66, 7, 4, skin);
+    hp(16, 34, 9, 8, shade);
+    hp(9, 6, 24, 32, skin);
+    hp(9, 34, 24, 4, shade);
+    hp(31, 21, 3, 6, skin); hp(31, 26, 3, 1, shade);
+    hp(8, 3, 25, 8, hair); hp(8, 3, 25, 2, hairHi);
+    hp(8, 3, 10, 22, hair); hp(9, 25, 3, 3, hair); hp(13, 25, 3, 3, hair);
+    hp(19, 10, 3, 3, hair); hp(24, 10, 3, 3, hair); hp(29, 10, 3, 3, hair);
+    hp(17, 16, 3, 8, shade); hp(18, 17, 1, 6, skin);
+    hp(24, 14, 6, 2, hair);
+    hp(24, 18, 6, 5, white); hp(27, 19, 2, 3, dark);
+    hp(24, 24, 6, 1, shade);
+    hp(26, 30, 6, 2, dark);
   }, mirror);
   const F = {front:[], back:[], right:[], left:[]};
-  for (let f = 0; f < 4; f++){ F.front.push(front(f)); F.back.push(back(f)); F.right.push(side(f, false)); F.left.push(side(f, true)); }
+  for (let f = 0; f < 4; f++){ F.front.push(frontFrame(f)); F.back.push(back(f)); F.right.push(side(f, false)); F.left.push(side(f, true)); }
+  faceKey = "";
   STUDENT_FRAMES[slot] = F;
   return F;
 }
@@ -459,14 +489,14 @@ function mpAddPlayerSprites(addSprite){
     else if (dFront < -.55) view = "back";
     else view = (fx*(-dirY) + fy*dirX) > 0 ? "right" : "left";
     v.view = view;
-    const o = addSprite(v.x, v.y, F[view][frame], .85, .075);
+    const o = addSprite(v.x, v.y, F[view][frame], STUDENT_SCALE, STUDENT_Y);
     if (o) o.minB = .5;
 
     const dx = v.x - P.x, dy = v.y - P.y, dist = Math.hypot(dx, dy);
     const ty = inv*(-planeY*dx + planeX*dy), tx = inv*(dirY*dx - dirX*dy);
     const el = mpTagEl(r.slot);
     if (ty > .3 && dist < 14 && rayLen(P.x, P.y, Math.atan2(dy, dx), dist) >= dist - .3){
-      const sx = (W/2) * (1 + tx/ty), sy = H/2 + (.075 - .425 - .06) * H/ty;
+      const sx = (W/2) * (1 + tx/ty), sy = H/2 + (STUDENT_Y - STUDENT_SCALE/2 + STUDENT_SCALE * 7/96 - .04) * H/ty;
       const cx = cr.left - wr.left + sx * cr.width / W, cy = cr.top - wr.top + sy * cr.height / H;
       if (el.textContent !== r.name) el.textContent = r.name;
       el.style.transform = `translate(${cx.toFixed(1)}px,${cy.toFixed(1)}px) translate(-50%,-100%)`;

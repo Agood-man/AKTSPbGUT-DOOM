@@ -259,12 +259,7 @@ function finalAI(e, dt, d, ux, uy, mx, my, sees, frac){
   e.atk -= dt; e.atk2 -= dt; e.atk3 = (e.atk3 || 6) - dt;
   const busy = shots.length > 22;
   if (phase === 1){
-    if (e.atk <= 0 && sees && !busy){
-      e.atk = 1.9 * rateMul();
-      const n = 2 + Math.floor(2 * bossLvl());
-      for (let i = -n; i <= n; i++) bossFire(e, ux, uy, i * .15);
-      beep("sine", 300, .3, .16, 90);
-    }
+    if (e.atk <= 0 && sees && !busy){ e.atk = 3.1; finalVolley(e, ux, uy, 2, .24, .8); beep("sine", 260, .3, .16, 90); }
     if (e.atk2 <= 0 && sees && !e.laser){ e.atk2 = 7; startBeam(e, "eyes"); }
   } else if (phase === 2){
     if (e.atk <= 0 && sees && !busy){ e.atk = 3.0; finalVolley(e, ux, uy, 2, .22, .85); }
