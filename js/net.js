@@ -203,13 +203,19 @@ function coopLeave(silent){
   if (!silent) coopRender();
 }
 
-function openTrackers(s){
-  for (const url of COOP_MQTT){
-    const t = {url, kind:"mqtt", mq:null, state:"connecting"};
-    s.trackers.push(t);
-    t.mq = mqttConn(url, api => {
+function trackerRetry(s, t){
+  if (s.closed || t.retrying) return;
+  if (s.role === "client" && s.host && s.host.opened) return;
+  t.retrying = true;
+  t.backoff = Math.min(30000, (t.backoff || 4000) * 1.6);
+  s.timers.push(setTimeout(() => { t.retrying = false; if (!s.closed) connectTracker(s, t); }, t.backoff));
+}
+function connectTracker(s, t){
+  t.state = "connecting";
+  if (t.kind === "mqtt"){
+    t.mq = mqttConn(t.url, api => {
       if (s.closed){ api.close(); return; }
-      t.state = "ok";
+      t.state = "ok"; t.backoff = 0;
       api.sub(mqttTopic(s.code, "all"));
       api.sub(mqttTopic(s.code, s.me));
       if (s.kick) setTimeout(s.kick, 150);
@@ -224,22 +230,23 @@ function openTrackers(s){
       } else if (m.answer && typeof m.offer_id === "string"){
         onTracker(s, t, {info_hash:s.hash, answer:m.answer, offer_id:m.offer_id, peer_id:m.from});
       }
-    }, () => { t.state = t.state === "ok" ? "closed" : "fail"; coopRender(); });
+    }, () => { t.state = t.state === "ok" ? "closed" : "fail"; coopRender(); trackerRetry(s, t); });
+    return;
   }
-  for (const url of COOP_TRACKERS){
-    const t = {url, ws:null, state:"connecting"};
-    s.trackers.push(t);
-    try {
-      t.ws = new WebSocket(url);
-      t.ws.onopen = () => { t.state = "ok"; coopRender(); announce(s, t); if (s.kick) s.kick(); };
-      t.ws.onerror = () => { if (t.state !== "ok") t.state = "fail"; coopRender(); };
-      t.ws.onclose = () => { if (t.state === "ok") t.state = "closed"; else t.state = "fail"; coopRender(); };
-      t.ws.onmessage = ev => {
-        let m; try { m = JSON.parse(ev.data); } catch(e){ return; }
-        if (!s.closed) onTracker(s, t, m);
-      };
-    } catch(e){ t.state = "fail"; }
-  }
+  try {
+    t.ws = new WebSocket(t.url);
+    t.ws.onopen = () => { t.state = "ok"; t.backoff = 0; coopRender(); announce(s, t); if (s.kick) s.kick(); };
+    t.ws.onerror = () => { if (t.state !== "ok") t.state = "fail"; coopRender(); };
+    t.ws.onclose = () => { t.state = t.state === "ok" ? "closed" : "fail"; coopRender(); trackerRetry(s, t); };
+    t.ws.onmessage = ev => {
+      let m; try { m = JSON.parse(ev.data); } catch(e){ return; }
+      if (!s.closed) onTracker(s, t, m);
+    };
+  } catch(e){ t.state = "fail"; trackerRetry(s, t); }
+}
+function openTrackers(s){
+  for (const url of COOP_MQTT){ const t = {url, kind:"mqtt", mq:null, state:"connecting"}; s.trackers.push(t); connectTracker(s, t); }
+  for (const url of COOP_TRACKERS){ const t = {url, ws:null, state:"connecting"}; s.trackers.push(t); connectTracker(s, t); }
 }
 
 function trackerSend(t, obj){
@@ -517,10 +524,17 @@ function coopRender(){
     const ok = s.trackers.filter(t => t.state === "ok").length;
     const n = s.net;
     const netTxt = n ? ` · Твоя сеть: внешний адрес ${n.srflx ? "✓" : "✗"}${coopTurn ? `, ретранслятор ${n.relay ? "✓" : "✗"}` : ""}` : "";
+    if (s.role === "client" && s.host && s.host.opened){
+      diag.textContent = "Соединены с хостом — серверы поиска больше не нужны." + netTxt;
+      return coopRenderRest(s);
+    }
     diag.textContent = `Серверы поиска: ${ok} из ${s.trackers.length} на связи${netTxt} · ` +
       s.trackers.map(t => (t.state === "ok" ? "✓ " : t.state === "connecting" ? "… " : "✗ ") +
         t.url.replace(/^wss?:\/\//, "").replace(/[:/].*$/, "")).join(" · ");
   } else diag.textContent = "";
+  coopRenderRest(s);
+}
+function coopRenderRest(s){
   if (!s) return;
   document.getElementById("cp_codeshow").textContent = s.code;
   const list = document.getElementById("cp_players");

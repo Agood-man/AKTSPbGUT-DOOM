@@ -324,6 +324,56 @@ function startBeam(e, kind){
   beep("sine", 200, kind === "eyes" ? 1.5 : 1.3, .14*a.vol, 900, a.pan);
 }
 
+var palEyeCache = {img:null, v:null};
+function palEyes(e){
+  const frames = ART[e.art || "boss_final"];
+  const img = frames && (frames[0] || frames);
+  const def = {lx:.375, rx:.625, y:.38};
+  if (!img || !img.width) return def;
+  if (palEyeCache.img === img) return palEyeCache.v;
+  let v = def;
+  try {
+    const W0 = img.width, H0 = img.height;
+    const c = document.createElement("canvas"); c.width = W0; c.height = H0;
+    const g = c.getContext("2d"); g.drawImage(img, 0, 0);
+    const d = g.getImageData(0, 0, W0, H0).data;
+    const region = (x0, x1) => {
+      const vals = [];
+      for (let y = Math.floor(H0*.12); y < Math.floor(H0*.56); y++)
+        for (let x = Math.floor(W0*x0); x < Math.floor(W0*x1); x++){
+          const i = (y*W0 + x)*4;
+          if (d[i+3] < 128) continue;
+          vals.push([.299*d[i] + .587*d[i+1] + .114*d[i+2], x, y]);
+        }
+      if (vals.length < 12) return null;
+      vals.sort((a, b) => a[0] - b[0]);
+      const k = Math.max(6, vals.length / 12 | 0);
+      let sx = 0, sy = 0;
+      for (let i = 0; i < k; i++){ sx += vals[i][1]; sy += vals[i][2]; }
+      return [sx / k / W0, sy / k / H0];
+    };
+    const L = region(.08, .5), R = region(.5, .92);
+    if (L && R && R[0] - L[0] > .15 && R[0] - L[0] < .7){
+      const y = (L[1] + R[1]) / 2;
+      if (y > .15 && y < .55) v = {lx:L[0], rx:R[0], y};
+    }
+  } catch(err){}
+  palEyeCache = {img, v};
+  return v;
+}
+
+function beamVisPoints(b){
+  const e = b.owner, s = e.scale || 2.5, E = palEyes(e);
+  const stretch = 2 * CAM_PLANE * H / W;
+  const rx = -Math.sin(P.a), ry = Math.cos(P.a);
+  const tx = P.x - e.x, ty = P.y - e.y, tl = Math.hypot(tx, ty) || 1;
+  const h = .5 - s + s * E.y;
+  return [E.lx, E.rx].map(fx => {
+    const o = (fx - .5) * s * stretch;
+    return {x:e.x + rx*o + tx/tl*.08, y:e.y + ry*o + ty/tl*.08, h};
+  });
+}
+
 function beamPoints(b){
   const e = b.owner, s = e.scale || 2.5;
   const px = -Math.sin(b.ang), py = Math.cos(b.ang);
@@ -1034,15 +1084,18 @@ function update(dt){
     b.t += dt;
     const ox = b.x, oy = b.y;
     b.x += b.vx*dt; b.y += b.vy*dt;
-    if (!P.dead && segDist(P.x, P.y, ox, oy, b.x, b.y) < PR + (b.big ? .38 : .18)){
+    const mx = (ox + b.x) / 2, my = (oy + b.y) / 2;
+    if (cell(mx, my) || solid(b.x, b.y, .1) || cell(b.x, b.y)){ b.dead = true; continue; }
+    const hitR = PR + (b.big ? .38 : .18);
+    if (!P.dead && segDist(P.x, P.y, ox, oy, b.x, b.y) < hitR){
       b.dead = true; damagePlayer(b.dmg || (FIREBALL_DMG + dmgBonus()), b.x, b.y);
     } else if (mpIsHost()){
       for (const p of mpPeers()){
-        if (p.gs.alive && segDist(p.gs.x, p.gs.y, ox, oy, b.x, b.y) < PR + (b.big ? .38 : .18)){
+        if (p.gs.alive && segDist(p.gs.x, p.gs.y, ox, oy, b.x, b.y) < hitR){
           b.dead = true; mpHurt(p, b.dmg || (FIREBALL_DMG + dmgBonus()), b.x, b.y); break;
         }
       }
-    } else if (solid(b.x, b.y, .1) || cell(b.x, b.y)) b.dead = true;
+    }
     if (b.t > 6) b.dead = true;
   }
   {
@@ -1556,17 +1609,23 @@ function render(){
     const locked = b.locked || b.t >= (b.lockT || (b.kind === "eyes" ? 1 : 0));
     const prog = Math.min(1, b.t / b.aimT);
     const dx = Math.cos(b.ang), dy = Math.sin(b.ang);
-    for (const p of beamPoints(b)){
+    const ax = b.owner.x + dx*b.dP, ay = b.owner.y + dy*b.dP;
+    for (const p of beamVisPoints(b)){
       if (!firing){
-        const co = addSprite(p.x - dx*.3, p.y - dy*.3, GLOW[1], .12 + .5*prog, p.h);
+        const co = addSprite(p.x, p.y, GLOW[1], .1 + .4*prog, p.h);
         if (co){ co.glow = 1; co.glowA = Math.min(1, .35 + .65*prog) * (locked ? .75 + .25*Math.sin(clock*40) : 1); }
       }
-      const len = rayLen(p.x, p.y, b.ang, 30);
+      let ex = ax - p.x, ey = ay - p.y;
+      const el = Math.hypot(ex, ey) || 1; ex /= el; ey /= el;
+      const ang = Math.atan2(ey, ex), len = rayLen(p.x, p.y, ang, 30);
       const step = firing ? .22 : locked ? .3 : .6;
       for (let s = .5; s < len; s += step){
-        const h = p.h + (0 - p.h) * Math.min(1, s / b.dP);
-        const o = addSprite(p.x + dx*s, p.y + dy*s, GLOW[1], firing ? .3 : locked ? .15 : .1, h);
-        if (o){ o.glow = 1; o.glowA = firing ? .95 : locked ? .7 + .3*Math.sin(clock*30) : .25 + .2*Math.sin(clock*12); }
+        const qx = p.x + ex*s, qy = p.y + ey*s, cd = Math.hypot(qx - P.x, qy - P.y);
+        if (cd < 1.2) continue;
+        const fade = Math.min(1, (cd - 1.2) / 2.2);
+        const h = p.h + (-.05 - p.h) * Math.min(1, s / el);
+        const o = addSprite(qx, qy, GLOW[1], (firing ? .26 : locked ? .14 : .1) * (.5 + .5*fade), h);
+        if (o){ o.glow = 1; o.glowA = fade * (firing ? .95 : locked ? .7 + .3*Math.sin(clock*30) : .25 + .2*Math.sin(clock*12)); }
       }
     }
   }

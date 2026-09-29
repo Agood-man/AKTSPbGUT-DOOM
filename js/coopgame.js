@@ -216,7 +216,8 @@ function mpClientTick(dt){
     e.t += dt;
     if (!e.alive) e.deadT += dt;
   }
-  for (const b of shots){ b.x += b.vx*dt; b.y += b.vy*dt; b.t += dt; }
+  for (const b of shots){ b.x += b.vx*dt; b.y += b.vy*dt; b.t += dt; if (cell(b.x, b.y) || solid(b.x, b.y, .1)) b.dead = true; }
+  if (shots.some(b => b.dead)) shots = shots.filter(b => !b.dead);
   for (const g of grenades){ g.x += g.vx*dt; g.y += g.vy*dt; }
   for (const b of beams) b.t += dt;
   for (const it of items) it.t += dt;
@@ -354,7 +355,8 @@ function mpStartRun(role, seed){
   document.getElementById("coop").classList.add("gone");
   const si = document.getElementById("seedin");
   si.value = (seed >>> 0).toString(16).toUpperCase().padStart(8, "0");
-  beginRun(null);
+  coopStarting = true;
+  try { beginRun(null); } finally { coopStarting = false; }
   si.value = ""; seedCustom = false;
   document.getElementById("seedtag").classList.add("gone");
   P.dead = false;

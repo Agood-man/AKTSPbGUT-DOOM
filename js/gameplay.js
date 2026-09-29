@@ -1,6 +1,6 @@
 
 function saveGame(){
-  if (typeof mpActive === "function" && mpActive()) return;
+  if (coopRun || (typeof mpActive === "function" && mpActive())) return;
   if (!playing || cheated) return;
   store.set(SAVE_KEY, JSON.stringify({
     v:1, level, kills, gun, seed:runSeed, seedName, cheated,
@@ -21,7 +21,7 @@ function loadGame(){
     return s;
   } catch(e){ return null; }
 }
-function clearSave(){ store.del(SAVE_KEY); }
+function clearSave(){ if (coopRun) return; store.del(SAVE_KEY); }
 
 function getRecord(){
   try {
@@ -31,7 +31,7 @@ function getRecord(){
   } catch(e){ return {level:0, kills:0}; }
 }
 function saveRecord(){
-  if (typeof mpActive === "function" && mpActive()) return;
+  if (coopRun || (typeof mpActive === "function" && mpActive())) return;
   if (cheated) return;
   const r = getRecord();
   const out = {level:num(r.level,0), kills:num(r.kills,0), streak:num(r.streak,0), custom:!!r.custom};
@@ -458,7 +458,7 @@ function showDiploma(){
   try { document.exitPointerLock?.(); } catch(e){}
   [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => beep("square", f, .35, .12, f), i * 160));
   if (!cheated){
-    try { localStorage.setItem(DIPLOMA_KEY, JSON.stringify({seed: runSeed, kills, time: Math.round(runTime)})); } catch(e){}
+    if (!coopRun) try { localStorage.setItem(DIPLOMA_KEY, JSON.stringify({seed: runSeed, kills, time: Math.round(runTime)})); } catch(e){}
   }
 }
 

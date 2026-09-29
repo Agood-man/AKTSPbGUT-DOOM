@@ -286,6 +286,7 @@ function initAudio(){
 }
 
 function beginRun(sv){
+  coopRun = coopStarting;
   initAudio();
   startDrone(); setDrone(.05);
   screen.classList.add("hide");
