@@ -142,6 +142,8 @@
   }
   #settings #setclose{margin-bottom:auto;min-width:180px;background:var(--bone);color:#1a120e;font-size:14px}
   #settings #setnote{font-size:11px;opacity:.6;margin:0;min-height:14px}
+  body.spectating #hud, body.spectating #face, body.spectating #lives, body.spectating #stick,
+  body.spectating #swap, body.spectating #fire, body.spectating #invbar{display:none!important}
   #spectag{position:absolute;left:0;right:0;top:calc(58px + env(safe-area-inset-top));text-align:center;font-size:12px;
     letter-spacing:2px;font-weight:bold;pointer-events:none;z-index:4;text-shadow:0 1px 0 #000,0 0 4px #000}
   #mpping{position:absolute;left:0;right:0;top:calc(14px + env(safe-area-inset-top));text-align:center;font-size:10px;
