@@ -142,6 +142,10 @@
   }
   #settings #setclose{margin-bottom:auto;min-width:180px;background:var(--bone);color:#1a120e;font-size:14px}
   #settings #setnote{font-size:11px;opacity:.6;margin:0;min-height:14px}
+  #spectag{position:absolute;left:0;right:0;top:calc(58px + env(safe-area-inset-top));text-align:center;font-size:12px;
+    letter-spacing:2px;font-weight:bold;pointer-events:none;z-index:4;text-shadow:0 1px 0 #000,0 0 4px #000}
+  #mpping{position:absolute;left:0;right:0;top:calc(14px + env(safe-area-inset-top));text-align:center;font-size:10px;
+    letter-spacing:1px;color:var(--bone);opacity:.6;pointer-events:none;z-index:4}
   #startrow{display:flex;gap:10px;justify-content:center;align-items:stretch}
   #startrow button{margin:0}
   .mptag{position:absolute;left:0;top:0;z-index:3;pointer-events:none;font-size:11px;letter-spacing:1px;white-space:nowrap;
