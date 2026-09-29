@@ -315,13 +315,13 @@ function rayLen(x0, y0, ang, max){
 function startBeam(e, kind){
   const aim = Math.atan2(P.y - e.y, P.x - e.x);
   const dir = Math.random() < .5 ? -1 : 1;
-  const b = {owner:e, kind, t:0, aimT:kind === "eyes" ? .85 : .95, fireT:kind === "eyes" ? .55 : 1.7,
+  const b = {owner:e, kind, t:0, aimT:kind === "eyes" ? 1.6 : 1.4, lockT:kind === "eyes" ? 1.0 : 0, fireT:kind === "eyes" ? .55 : 2.4,
              ang:kind === "eyes" ? aim : aim - .9*dir, a0:aim - .9*dir, a1:aim + .9*dir, dP:Math.max(1.5, Math.hypot(P.x - e.x, P.y - e.y)),
-             tick:0, fired:false};
+             tick:0, fired:false, locked:kind !== "eyes", tgt:(typeof mpTarget !== "undefined" && mpTarget) || null};
   beams.push(b);
   e.laser = b;
   const a = atPos(e.x, e.y);
-  beep("sine", 260, .85, .16*a.vol, 1300, a.pan);
+  beep("sine", 200, kind === "eyes" ? 1.5 : 1.3, .14*a.vol, 900, a.pan);
 }
 
 function beamPoints(b){
@@ -338,11 +338,18 @@ function updateBeams(dt){
     b.t += dt;
     if (!e.alive || e.blink){ if (e.laser === b) e.laser = null; continue; }
     const firing = b.t >= b.aimT;
-    if (!firing && b.kind === "eyes"){
-      const want = Math.atan2(P.y - e.y, P.x - e.x);
+    if (!firing && b.kind === "eyes" && !b.locked){
+      const T = b.tgt && b.tgt.gs && b.tgt.gs.alive ? b.tgt.gs : P;
+      const want = Math.atan2(T.y - e.y, T.x - e.x);
       let d = want - b.ang; while (d > Math.PI) d -= 2*Math.PI; while (d < -Math.PI) d += 2*Math.PI;
       b.ang += Math.max(-1.3*dt, Math.min(1.3*dt, d));
-      b.dP = Math.max(1.5, Math.hypot(P.x - e.x, P.y - e.y));
+      b.dP = Math.max(1.5, Math.hypot(T.x - e.x, T.y - e.y));
+      if (b.t >= b.lockT){
+        b.locked = true;
+        const a = atPos(e.x, e.y);
+        beep("square", 1700, .07, .16*a.vol, 1700, a.pan);
+        setTimeout(() => beep("square", 1700, .07, .14*a.vol, 1700, a.pan), 110);
+      }
     }
     if (firing){
       if (!b.fired){
@@ -354,13 +361,13 @@ function updateBeams(dt){
       if (b.kind === "sweep") b.ang = b.a0 + (b.a1 - b.a0) * Math.min(1, (b.t - b.aimT) / b.fireT);
       b.tick -= dt;
       if (b.tick <= 0){
-        b.tick = .12;
+        b.tick = .15;
         for (const T of mpTargets()){
           for (const p of beamPoints(b)){
             const len = rayLen(p.x, p.y, b.ang, 30);
             const dx = Math.cos(b.ang), dy = Math.sin(b.ang);
             const qx = T.x - p.x, qy = T.y - p.y, s = qx*dx + qy*dy;
-            if (s > 0 && s < len && Math.abs(qx*dy - qy*dx) < .36){
+            if (s > 0 && s < len && Math.abs(qx*dy - qy*dx) < .3){
               if (T.peer) mpHurt(T.peer, 6 + dmgBonus()*.3, p.x, p.y); else damagePlayer(6 + dmgBonus()*.3, p.x, p.y);
               break;
             }
@@ -624,6 +631,7 @@ function shoot(){
   if (g.ammo) ammo[g.ammo]--;
   cooldown = g.cd; recoil = 1;
   flash = g.launcher ? 0 : 1;
+  if (mpActive()) mpFireMark();
   beep("square", g.snd[0], g.snd[1], g.snd[2]);
   if (gun === 1) noiseBurst(.3, .35, 2600, 1);
   else if (g.launcher) noiseBurst(.2, .3, 900, 1);
@@ -1320,8 +1328,9 @@ function collectLights(){
   }
   for (const e of booms) addLight(e.x, e.y, 5.5, 1.5 * Math.max(0, 1 - e.t/.45), 4, .05);
   if (portal) addLight(portal.x, portal.y, 4.5, Math.min(1, portal.t / .9) * (1 + .15*Math.sin(clock*4)), 6, 0);
+  if (mpActive()) mpLights();
   for (const b of beams){
-    if (b.t < b.aimT) continue;
+    if (b.t < b.aimT){ addLight(b.owner.x, b.owner.y, 3.5, .7 * Math.min(1, b.t / b.aimT), 1, 0); continue; }
     const p = beamPoints(b)[0], len = rayLen(p.x, p.y, b.ang, 30), dx = Math.cos(b.ang), dy = Math.sin(b.ang);
     for (let s = 1; s < len; s += 3) addLight(p.x + dx*s, p.y + dy*s, 2.6, .9, 1, 0);
   }
@@ -1544,14 +1553,20 @@ function render(){
   }
   for (const b of beams){
     const firing = b.t >= b.aimT;
+    const locked = b.locked || b.t >= (b.lockT || (b.kind === "eyes" ? 1 : 0));
+    const prog = Math.min(1, b.t / b.aimT);
     const dx = Math.cos(b.ang), dy = Math.sin(b.ang);
     for (const p of beamPoints(b)){
+      if (!firing){
+        const co = addSprite(p.x - dx*.3, p.y - dy*.3, GLOW[1], .12 + .5*prog, p.h);
+        if (co){ co.glow = 1; co.glowA = Math.min(1, .35 + .65*prog) * (locked ? .75 + .25*Math.sin(clock*40) : 1); }
+      }
       const len = rayLen(p.x, p.y, b.ang, 30);
-      const step = firing ? .22 : .55;
+      const step = firing ? .22 : locked ? .3 : .6;
       for (let s = .5; s < len; s += step){
         const h = p.h + (0 - p.h) * Math.min(1, s / b.dP);
-        const o = addSprite(p.x + dx*s, p.y + dy*s, GLOW[1], firing ? .3 : .11, h);
-        if (o){ o.glow = 1; o.glowA = firing ? .95 : .35 + .25*Math.sin(clock*20); }
+        const o = addSprite(p.x + dx*s, p.y + dy*s, GLOW[1], firing ? .3 : locked ? .15 : .1, h);
+        if (o){ o.glow = 1; o.glowA = firing ? .95 : locked ? .7 + .3*Math.sin(clock*30) : .25 + .2*Math.sin(clock*12); }
       }
     }
   }

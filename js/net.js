@@ -15,10 +15,30 @@ var COOP_MQTT = [
   "wss://public.mqtthq.com:8084/mqtt"
 ];
 var COOP_ICE = [
-  {urls:["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"]},
-  {urls:"stun:stun.nextcloud.com:443"},
-  {urls:"stun:stun.sipgate.net:3478"}
+  {urls:["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302", "stun:stun2.l.google.com:19302"]},
+  {urls:"stun:stun.sipnet.ru:3478"},
+  {urls:"stun:stun.cloudflare.com:3478"},
+  {urls:"stun:stun.nextcloud.com:443"}
 ];
+var COOP_TURN_APP = ["doom", "for", "akt"].join("");
+var COOP_TURN_KEY = ((d, k) => d.map((b, i) => String.fromCharCode(b ^ k.charCodeAt(i % k.length) ^ ((i * 7) & 31))).join(""))(
+  [33,43,58,71,42,23,34,41,91,8,70,27,10,76,67,16,52,52,11,67,10,119,43,120,30,35,19,9,4,36,67,40,102,10,63,20,8,58,45,82,13,117,51,13,11,70,65,37], ["ptu3d", "-akt"].join(""));
+var coopTurn = null, coopTurnTried = false;
+function coopIce(){ return coopTurn && coop && coop.role === "client" && (coop.tries || 0) >= 1 ? COOP_ICE.concat(coopTurn) : COOP_ICE; }
+function coopLoadTurn(){
+  if (coopTurnTried || !COOP_TURN_APP || !COOP_TURN_KEY) return Promise.resolve();
+  coopTurnTried = true;
+  const ctl = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const tm = setTimeout(() => ctl && ctl.abort(), 2500);
+  return fetch(`https://${COOP_TURN_APP}.metered.live/api/v1/turn/credentials?apiKey=${encodeURIComponent(COOP_TURN_KEY)}`, ctl ? {signal:ctl.signal} : {})
+    .then(r => r.json())
+    .then(list => { if (Array.isArray(list) && list.length) coopTurn = list.filter(x => x && x.urls).slice(0, 6); })
+    .catch(() => {})
+    .finally(() => clearTimeout(tm));
+}
+function sdpKinds(sdp){
+  return {host:/ typ host/.test(sdp), srflx:/ typ srflx/.test(sdp), relay:/ typ relay/.test(sdp)};
+}
 (() => {
   const q = new URLSearchParams(location.search), t = q.get("tracker"), m = q.get("mqtt");
   if (t) COOP_TRACKERS = t === "none" ? [] : [t];
@@ -155,7 +175,8 @@ function coopStart(role, code){
     s.timers.push(setInterval(() => { for (const t of s.trackers) announce(s, t); }, 20000));
   } else {
     coopStatus("Ищу комнату " + code + "…");
-    s.timers.push(setTimeout(() => clientLoop(s), 1200));
+    s.kick = () => { if (!s.loopStarted){ s.loopStarted = true; clientLoop(s); } };
+    s.timers.push(setTimeout(() => s.kick(), 2500));
     s.timers.push(setTimeout(() => {
       if (!s.closed && !s.host) coopStatus("Комната не найдена. Проверь код — или хост вышел, или трекеры не пропустили запрос.", true);
     }, 25000));
@@ -191,6 +212,7 @@ function openTrackers(s){
       t.state = "ok";
       api.sub(mqttTopic(s.code, "all"));
       api.sub(mqttTopic(s.code, s.me));
+      if (s.kick) setTimeout(s.kick, 150);
       coopRender();
     }, (topic, text) => {
       if (s.closed) return;
@@ -209,7 +231,7 @@ function openTrackers(s){
     s.trackers.push(t);
     try {
       t.ws = new WebSocket(url);
-      t.ws.onopen = () => { t.state = "ok"; coopRender(); announce(s, t); };
+      t.ws.onopen = () => { t.state = "ok"; coopRender(); announce(s, t); if (s.kick) s.kick(); };
       t.ws.onerror = () => { if (t.state !== "ok") t.state = "fail"; coopRender(); };
       t.ws.onclose = () => { if (t.state === "ok") t.state = "closed"; else t.state = "fail"; coopRender(); };
       t.ws.onmessage = ev => {
@@ -247,17 +269,22 @@ function onTracker(s, t, m){
 }
 
 async function makeOffers(s, n){
-  const offers = [];
-  for (let i = 0; i < n; i++){
-    const pc = new RTCPeerConnection({iceServers:COOP_ICE});
+  if ((s.tries || 0) >= 1) await coopLoadTurn();
+  const one = async () => {
+    const pc = new RTCPeerConnection({iceServers:coopIce()});
     const ch = pc.createDataChannel("g", {ordered:true});
+    const fch = pc.createDataChannel("f", {ordered:false, maxRetransmits:0});
     await pc.setLocalDescription(await pc.createOffer());
-    await waitIce(pc, 2500);
+    await waitIce(pc, 1500);
     const id = rid(20);
-    s.pending.set(id, {pc, ch, t:performance.now()});
-    offers.push({offer:{type:"offer", sdp:pc.localDescription.sdp}, offer_id:id});
-  }
-  return offers;
+    s.pending.set(id, {pc, ch, fch, t:performance.now()});
+    const sdp = pc.localDescription.sdp;
+    s.net = sdpKinds(sdp);
+    return {offer:{type:"offer", sdp}, offer_id:id};
+  };
+  const res = await Promise.all(Array.from({length:n}, one));
+  coopRender();
+  return res;
 }
 
 async function clientLoop(s){
@@ -270,27 +297,32 @@ async function clientLoop(s){
     if (s.closed || s.answered) return;
     for (const t of s.trackers) if (t.state === "ok") announce(s, t, offers);
   }
-  s.timers.push(setTimeout(() => clientLoop(s), 4000));
+  s.timers.push(setTimeout(() => clientLoop(s), 3000));
 }
 
 async function hostOnOffer(s, t, m){
   if (s.peers.has(m.peer_id)) return;
   if (s.peers.size >= COOP_MAX - 1) return;
-  const pc = new RTCPeerConnection({iceServers:COOP_ICE});
+  if (s.closed || s.peers.has(m.peer_id)) return;
+  const pc = new RTCPeerConnection({iceServers:coopIce()});
   const peer = {id:m.peer_id, pc, ch:null, name:"…", slot:-1, ping:null, type:"", joined:false};
   s.peers.set(m.peer_id, peer);
-  pc.ondatachannel = ev => { peer.ch = ev.channel; bindChannel(s, peer); };
+  pc.ondatachannel = ev => {
+    if (ev.channel.label === "f"){ peer.fch = ev.channel; bindFast(s, peer); }
+    else { peer.ch = ev.channel; bindChannel(s, peer); }
+  };
   pc.onconnectionstatechange = () => {
     if (["failed", "closed"].includes(pc.connectionState)) dropPeer(s, peer);
   };
   try {
     await pc.setRemoteDescription(m.offer);
     await pc.setLocalDescription(await pc.createAnswer());
-    await waitIce(pc, 2500);
+    await waitIce(pc, 1500);
+    s.net = sdpKinds(pc.localDescription.sdp);
     trackerSend(t, {action:"announce", info_hash:s.hash, peer_id:s.me, to_peer_id:m.peer_id,
                     answer:{type:"answer", sdp:pc.localDescription.sdp}, offer_id:m.offer_id});
   } catch(e){ s.peers.delete(m.peer_id); try { pc.close(); } catch(err){} return; }
-  s.timers.push(setTimeout(() => { if (!peer.joined) dropPeer(s, peer); }, 20000));
+  s.timers.push(setTimeout(() => { if (!peer.joined) dropPeer(s, peer); }, 30000));
 }
 
 async function clientOnAnswer(s, m){
@@ -301,26 +333,64 @@ async function clientOnAnswer(s, m){
   s.pending.delete(m.offer_id);
   for (const q of s.pending.values()){ try { q.pc.close(); } catch(e){} }
   s.pending.clear();
-  const host = {id:m.peer_id, pc:p.pc, ch:p.ch, ping:null, type:""};
+  const host = {id:m.peer_id, pc:p.pc, ch:p.ch, fch:p.fch, ping:null, type:""};
   s.host = host;
   p.pc.onconnectionstatechange = () => {
     const st = p.pc.connectionState;
-    if (st === "failed") coopStatus("Прямое соединение не удалось: ваши сети не пропускают связь напрямую.", true);
-    if (st === "closed" || st === "failed"){ if (!s.closed) hostLost(s); }
+    if (s.closed || s.host !== host) return;
+    if ((st === "failed" || st === "closed") && !host.opened) clientRetry(s, host);
+    else if (st === "failed" || st === "closed") hostLost(s);
   };
   coopStatus("Хост найден, соединяюсь…");
   try { await p.pc.setRemoteDescription(m.answer); }
   catch(e){ coopStatus("Ошибка соединения: " + e.message, true); return; }
   bindChannel(s, host);
+  bindFast(s, host);
   s.timers.push(setTimeout(() => {
-    if (!s.closed && (!host.ch || host.ch.readyState !== "open"))
-      coopStatus("Прямое соединение не удалось: ваши сети не пропускают связь напрямую.", true);
-  }, 15000));
+    if (!s.closed && s.host === host && !host.opened) clientRetry(s, host);
+  }, 12000));
+}
+
+function clientRetry(s, host){
+  try { host.pc.close(); } catch(e){}
+  s.host = null; s.answered = false; s.players = [];
+  s.tries = (s.tries || 0) + 1;
+  if (s.tries > 3){
+    coopStatus(noDirectMsg(s), true);
+    return;
+  }
+  coopStatus(`Связь напрямую не пробилась. Пробую через ретранслятор (${s.tries} из 3)…`, true);
+  s.me = "C" + rid(19);
+  for (const t of s.trackers) if (t.kind === "mqtt" && t.mq && t.state === "ok") t.mq.sub(mqttTopic(s.code, s.me));
+  s.timers.push(setTimeout(() => clientLoop(s), 400));
+}
+
+function noDirectMsg(s){
+  const n = s.net || {};
+  if (!n.srflx && !n.relay) return "Связь напрямую не пробилась: не удалось узнать твой внешний адрес (STUN не отвечает). Попробуй другую сеть — Wi-Fi вместо мобильной или наоборот.";
+  if (!n.relay) return "Связь напрямую не пробилась: похоже, у тебя или у хоста «серый» IP мобильного оператора. Поможет другая сеть (Wi-Fi) или ретранслятор TURN.";
+  return "Связь не пробилась даже через ретранслятор. Попробуй другую сеть.";
+}
+
+function bindFast(s, peer){
+  const ch = peer.fch;
+  if (!ch) return;
+  ch.onmessage = ev => {
+    let m; try { m = JSON.parse(ev.data); } catch(e){ return; }
+    if (!m || typeof m.t !== "string" || s.closed) return;
+    if (s.role === "host") hostMsg(s, peer, m); else clientMsg(s, m);
+  };
+}
+function coopSendFast(peer, obj){
+  if (!peer) return;
+  const c = peer.fch && peer.fch.readyState === "open" ? peer.fch : peer.ch;
+  coopSend(c, obj);
 }
 
 function bindChannel(s, peer){
   const ch = peer.ch;
   ch.onopen = () => {
+    peer.opened = true;
     if (s.role === "client") coopSend(ch, {t:"hello", name:s.name, ver:COOP_VER});
   };
   ch.onmessage = ev => {
@@ -330,7 +400,9 @@ function bindChannel(s, peer){
   };
   ch.onclose = () => {
     if (s.closed) return;
-    if (s.role === "host") dropPeer(s, peer); else hostLost(s);
+    if (s.role === "host") dropPeer(s, peer);
+    else if (s.host === peer && !peer.opened) clientRetry(s, peer);
+    else if (s.host === peer) hostLost(s);
   };
   if (ch.readyState === "open") ch.onopen();
 }
@@ -369,7 +441,7 @@ function clientMsg(s, m){
     }));
     coopRender();
   } else if (m.t === "ping" && typeof m.ts === "number"){
-    coopSend(s.host.ch, {t:"pong", ts:m.ts});
+    coopSendFast(s.host, {t:"pong", ts:m.ts});
   } else if (m.t === "reject"){
     coopStatus(String(m.reason || "Хост отказал в подключении.").slice(0, 80), true);
     const h = s.host; s.host = null;
@@ -398,7 +470,7 @@ function hostTick(s){
   if (s.closed) return;
   for (const p of s.peers.values()){
     if (!p.joined) continue;
-    coopSend(p.ch, {t:"ping", ts:performance.now()});
+    coopSendFast(p, {t:"ping", ts:performance.now()});
     connType(p.pc).then(tp => { if (tp) p.type = tp; });
   }
   hostLobby(s);
@@ -443,7 +515,9 @@ function coopRender(){
   const diag = document.getElementById("cp_diag");
   if (s){
     const ok = s.trackers.filter(t => t.state === "ok").length;
-    diag.textContent = `Серверы поиска: ${ok} из ${s.trackers.length} на связи · ` +
+    const n = s.net;
+    const netTxt = n ? ` · Твоя сеть: внешний адрес ${n.srflx ? "✓" : "✗"}${coopTurn ? `, ретранслятор ${n.relay ? "✓" : "✗"}` : ""}` : "";
+    diag.textContent = `Серверы поиска: ${ok} из ${s.trackers.length} на связи${netTxt} · ` +
       s.trackers.map(t => (t.state === "ok" ? "✓ " : t.state === "connecting" ? "… " : "✗ ") +
         t.url.replace(/^wss?:\/\//, "").replace(/[:/].*$/, "")).join(" · ");
   } else diag.textContent = "";

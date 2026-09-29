@@ -156,9 +156,11 @@ function mpSnap(){
   }
   const I = [];
   for (const it of items){ if (it.dead) continue; if (!it.id) it.id = ++MP.nid; I.push([it.id, it.kind, +it.x.toFixed(2), +it.y.toFixed(2)]); }
-  const PL = [[0, +P.x.toFixed(2), +P.y.toFixed(2), +P.a.toFixed(2), P.dead ? 0 : 1]];
-  for (const p of mpPeers()) PL.push([p.slot, +p.gs.x.toFixed(2), +p.gs.y.toFixed(2), +p.gs.a.toFixed(2), p.gs.alive ? 1 : 0]);
-  return {t:"snap", L:level, left:enemiesLeft, E, I, PL,
+  const now = performance.now();
+  const PL = [[0, +P.x.toFixed(2), +P.y.toFixed(2), +P.a.toFixed(2), P.dead ? 0 : 1, gun, Math.min(999, Math.round(now - (MP.hostFireT || 0)))]];
+  for (const p of mpPeers()) PL.push([p.slot, +p.gs.x.toFixed(2), +p.gs.y.toFixed(2), +p.gs.a.toFixed(2), p.gs.alive ? 1 : 0,
+                                      p.gs.gun | 0, Math.min(999, Math.round(now - (p.gs.fireT || 0)))]);
+  return {t:"snap", q:++MP.seq, L:level, left:enemiesLeft, E, I, PL,
     S:shots.map(b => [+b.x.toFixed(2), +b.y.toFixed(2), +b.vx.toFixed(2), +b.vy.toFixed(2), b.big ? 1 : 0]),
     G:grenades.map(g => [+g.x.toFixed(2), +g.y.toFixed(2), +g.vx.toFixed(2), +g.vy.toFixed(2)]),
     B:booms.map(b => [+b.x.toFixed(2), +b.y.toFixed(2), +b.t.toFixed(2)]),
@@ -168,6 +170,7 @@ function mpSnap(){
 
 function mpApplySnap(m){
   if (m.L !== level) return;
+  if (typeof m.q === "number"){ if (m.q <= (MP.lastQ || 0)) return; MP.lastQ = m.q; }
   const arr = [], seen = new Set();
   for (const r of m.E){
     let e = mpEnt.get(r[0]);
@@ -195,6 +198,12 @@ function mpApplySnap(m){
     if (own) beams.push({owner:own, ang:r[1], t:r[2], aimT:r[3], fireT:r[4], kind:r[5] ? "sweep" : "eyes", dP:r[6]});
   }
   mpRemote = m.PL.filter(p => p[0] !== coop.slot);
+  const nowFx = performance.now();
+  for (const p of mpRemote){
+    if (p[4] && typeof p[6] === "number" && p[6] < 60 && nowFx - (mpLastFx[p[0]] || 0) > 70){
+      mpLastFx[p[0]] = nowFx; mpShotFx(p[0], p[1], p[2], p[3], p[5] | 0);
+    }
+  }
   portal = m.po ? {x:m.po[0], y:m.po[1], t:m.po[2]} : null;
   if (enemiesLeft !== m.left){ enemiesLeft = m.left; updateHUD(); }
 }
@@ -216,18 +225,27 @@ function mpClientTick(dt){
 
 function mpTick(dt){
   if (!coop || coop.closed){ mpEnd("Связь с комнатой потеряна."); return; }
+  mpSpecStep();
+  for (const f of mpFlashes) f.t += dt;
+  while (mpFlashes.length && mpFlashes[0].t > .09) mpFlashes.shift();
+  MP.pingT = (MP.pingT || 0) - dt;
+  if (MP.pingT <= 0){ MP.pingT = .5; mpPingUpdate(); }
   MP.sendT -= dt;
   if (mpIsHost()){
     MP.flowT -= dt;
     if (MP.flowT <= 0){ MP.flowT = .3; mpBuildFlows(); }
     if (MP.sendT <= 0){
-      MP.sendT = 1/15;
+      MP.sendT = 1/20;
       const snap = JSON.stringify(mpSnap());
-      for (const p of mpPeers()) if (p.ch && p.ch.readyState === "open") try { p.ch.send(snap); } catch(e){}
+      for (const p of mpPeers()){
+        if (p.type === "через ретранслятор" && (MP.seq & 1)) continue;
+        const c = p.fch && p.fch.readyState === "open" ? p.fch : p.ch;
+        if (c && c.readyState === "open" && c.bufferedAmount < 262144) try { c.send(snap); } catch(e){}
+      }
     }
   } else if (MP.sendT <= 0 && coop.host){
-    MP.sendT = 1/15;
-    coopSend(coop.host.ch, {t:"st", x:+P.x.toFixed(2), y:+P.y.toFixed(2), a:+P.a.toFixed(3), g:gun, al:P.dead ? 0 : 1,
+    MP.sendT = 1/20;
+    coopSendFast(coop.host, {t:"st", q:++MP.seq, x:+P.x.toFixed(2), y:+P.y.toFixed(2), a:+P.a.toFixed(3), g:gun, al:P.dead ? 0 : 1,
                             u:unlocked.reduce((m, v, i) => m | (v ? 1 << i : 0), 0),
                             hp:Math.round(P.hp), W, H, pl:+CAM_PLANE.toFixed(3)});
   }
@@ -277,6 +295,7 @@ function mpHostMsg(s, peer, m){
   if (!mpIsHost()) return;
   if (m.t === "st"){
     const g = peer.gs || (peer.gs = {alive:true});
+    if (typeof m.q === "number"){ if (m.q <= (g.lastQ || 0)) return; g.lastQ = m.q; }
     if (typeof m.x === "number" && typeof m.y === "number" && !solid(m.x, m.y, .05)){ g.x = m.x; g.y = m.y; }
     if (g.x === undefined){ g.x = P.x; g.y = P.y; }
     g.a = +m.a || 0; g.gun = m.g | 0; g.hp = +m.hp || 0; g.u = m.u | 0;
@@ -288,10 +307,13 @@ function mpHostMsg(s, peer, m){
     const dmg = Math.max(0, Math.min(400, +m.d || 0));
     const off = Math.max(-.3, Math.min(.3, +m.o || 0));
     const a = +m.a || 0;
+    const nf = performance.now();
+    if (nf - (mpLastFx[peer.slot] || 0) > 70){ mpLastFx[peer.slot] = nf; peer.gs.fireT = nf; mpShotFx(peer.slot, peer.gs.x, peer.gs.y, a, gi); }
     hitscanAt(peer.gs.x, peer.gs.y, a, off, dmg, gi, peer.gs.W || 206, peer.gs.H || 430, peer.gs.pl || .66,
               rayLen(peer.gs.x, peer.gs.y, a + off, 40));
   } else if (m.t === "gren" && peer.gs && peer.gs.alive){
     const a = +m.a || 0, x = peer.gs.x, y = peer.gs.y;
+    peer.gs.fireT = performance.now(); mpShotFx(peer.slot, x, y, a, 3);
     grenades.push({x:x + Math.cos(a)*.4, y:y + Math.sin(a)*.4, vx:Math.cos(a)*7, vy:Math.sin(a)*7, t:0, sx:x, sy:y});
   } else if (m.t === "dead"){
     if (peer.gs) peer.gs.alive = false;
@@ -324,7 +346,7 @@ function mpClientMsg(s, m){
 }
 
 function mpStartRun(role, seed){
-  MP = {active:true, role, sendT:0, flowT:0, nid:0, started:false};
+  MP = {active:true, role, sendT:0, flowT:0, nid:0, started:false, seq:0, lastQ:0};
   document.getElementById("coop").classList.add("gone");
   const si = document.getElementById("seedin");
   si.value = (seed >>> 0).toString(16).toUpperCase().padStart(8, "0");
@@ -348,14 +370,16 @@ function mpHostStart(){
 function mpEnd(msg){
   if (!MP) return;
   const wasClient = MP.role === "client";
-  MP = null; mpTarget = null; mpRemote = []; mpEnt.clear(); P.dead = false; mpHideTags();
+  MP = null; mpTarget = null; mpRemote = []; mpEnt.clear(); P.dead = false; mpHideTags(); specGun = -1;
+  document.getElementById("spectag").classList.add("gone"); document.getElementById("mpping").classList.add("gone");
   if (msg && playing){ quitToMenu(); showBanner(msg, true); }
   else if (msg && wasClient){ showBanner(msg, true); }
 }
 
 function mpQuit(){
   if (mpIsHost()) for (const p of mpPeers()) coopSend(p.ch, {t:"end"});
-  MP = null; mpTarget = null; mpRemote = []; mpEnt.clear(); P.dead = false; mpHideTags();
+  MP = null; mpTarget = null; mpRemote = []; mpEnt.clear(); P.dead = false; mpHideTags(); specGun = -1;
+  document.getElementById("spectag").classList.add("gone"); document.getElementById("mpping").classList.add("gone");
 }
 
 var STUDENT_FRAMES = {};
@@ -446,10 +470,10 @@ function studentFrames(slot){
 var mpVis = {}, mpTagEls = {};
 function mpPlayerList(){
   if (mpIsHost()) return mpPeers().filter(p => p.gs.alive && p.gs.x !== undefined)
-    .map(p => ({slot:p.slot, x:p.gs.x, y:p.gs.y, a:p.gs.a || 0, name:p.name}));
+    .map(p => ({slot:p.slot, x:p.gs.x, y:p.gs.y, a:p.gs.a || 0, name:p.name, gun:p.gs.gun | 0}));
   return mpRemote.filter(p => p[4]).map(p => {
     const pl = coop && coop.players.find(q => q.slot === p[0]);
-    return {slot:p[0], x:p[1], y:p[2], a:p[3], name:pl ? pl.name : ""};
+    return {slot:p[0], x:p[1], y:p[2], a:p[3], name:pl ? pl.name : "", gun:p[5] | 0};
   });
 }
 function mpTagEl(slot){
@@ -483,6 +507,7 @@ function mpAddPlayerSprites(addSprite){
     const fx = Math.cos(r.a), fy = Math.sin(r.a);
     const tvx = P.x - v.x, tvy = P.y - v.y, tl = Math.hypot(tvx, tvy) || 1;
     const dFront = (fx*tvx + fy*tvy) / tl;
+    if (P.dead && r.slot === MP.specSlot) continue;
     const F = studentFrames(r.slot);
     let view;
     if (dFront > .55) view = "front";
@@ -491,6 +516,8 @@ function mpAddPlayerSprites(addSprite){
     v.view = view;
     const o = addSprite(v.x, v.y, F[view][frame], STUDENT_SCALE, STUDENT_Y);
     if (o) o.minB = .5;
+    const wo = addSprite(v.x + tvx/tl*.03, v.y + tvy/tl*.03, weaponOverlay(r.slot, r.gun | 0, view), STUDENT_SCALE, STUDENT_Y);
+    if (wo) wo.minB = .5;
 
     const dx = v.x - P.x, dy = v.y - P.y, dist = Math.hypot(dx, dy);
     const ty = inv*(-planeY*dx + planeX*dy), tx = inv*(dirY*dx - dirX*dy);
@@ -506,6 +533,10 @@ function mpAddPlayerSprites(addSprite){
     }
   }
   for (const k in mpTagEls) if (!shown.has(k)) mpTagEls[k].style.display = "none";
+  for (const f of mpFlashes){
+    const fo = addSprite(f.x, f.y, GLOW[0], f.big ? .55 : .38, STUDENT_Y - .1);
+    if (fo){ fo.glow = 0; fo.glowA = Math.max(0, 1 - f.t / .09); }
+  }
 }
 
 function mpGunNeed(n){
@@ -546,3 +577,93 @@ function mpMinimap(mm, ox, oy, s){
     mm.fillRect(ox + x*s - s*.8, oy + y*s - s*.8, s*1.6, s*1.6);
   }
 }
+
+var WEAPON_OVL = {}, mpFlashes = [], mpLastFx = {};
+function weaponOverlay(slot, gi, view){
+  const key = slot + ":" + gi + ":" + view;
+  if (WEAPON_OVL[key]) return WEAPON_OVL[key];
+  const shirt = SHIRTS[slot] || SHIRT_DEFAULT, sleeve = shirtShade(shirt, .8);
+  const skin = "#d8a06a", steel = "#3a3d44", steelHi = "#5a5f6a", black = "#0c0c0e", wood = "#5a3a1e", olive = "#4d5a3a";
+  const c = document.createElement("canvas"); c.width = c.height = 96;
+  const g = c.getContext("2d");
+  if (view === "left"){ g.translate(96, 0); g.scale(-1, 1); }
+  const px = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+  if (view === "front"){
+    px(33, 50, 10, 7, sleeve); px(53, 50, 10, 7, sleeve);
+    if (gi === 0){ px(43, 52, 10, 8, steel); px(45, 54, 6, 4, black); }
+    else if (gi === 1){ px(40, 50, 16, 10, wood); px(41, 51, 6, 6, steel); px(49, 51, 6, 6, steel); px(42, 52, 4, 4, black); px(50, 52, 4, 4, black); }
+    else if (gi === 2){ px(38, 48, 20, 14, steel); px(40, 49, 16, 2, steelHi); px(44, 52, 8, 7, black); }
+    else { px(38, 44, 20, 20, olive); px(42, 48, 12, 12, black); px(38, 44, 20, 2, "#66744c"); }
+    px(41, 58, 5, 4, skin); px(50, 58, 5, 4, skin);
+  } else if (view === "back"){
+    px(63, 50, 7, 8, sleeve);
+    const len = gi === 0 ? 4 : gi === 3 ? 10 : 8;
+    px(66, 50, len, 5, gi === 3 ? olive : steel);
+  } else {
+    px(48, 50, 16, 7, sleeve); px(63, 50, 5, 7, skin);
+    if (gi === 0){ px(62, 49, 12, 5, steel); px(64, 54, 4, 6, steel); }
+    else if (gi === 1){ px(56, 51, 8, 6, wood); px(62, 49, 26, 4, steel); px(70, 53, 9, 3, wood); }
+    else if (gi === 2){ px(56, 48, 26, 7, steel); px(58, 48, 22, 2, steelHi); px(66, 55, 5, 8, black); px(80, 50, 6, 3, steel); }
+    else { px(52, 45, 34, 10, olive); px(52, 45, 34, 2, "#66744c"); px(84, 46, 3, 8, black); }
+  }
+  WEAPON_OVL[key] = c;
+  return c;
+}
+
+function mpShotFx(slot, x, y, a, gi){
+  mpFlashes.push({x:x + Math.cos(a)*.5, y:y + Math.sin(a)*.5, t:0, big:gi === 1 || gi === 3});
+  const au = atPos(x, y), g = GUNS[gi] || GUNS[0];
+  beep("square", g.snd[0], g.snd[1], g.snd[2] * .55 * au.vol, undefined, au.pan);
+  if (gi === 1) noiseBurst(.25, .2 * au.vol, 2600, 1, au.pan);
+}
+function mpLights(){
+  for (const f of mpFlashes) addLight(f.x, f.y, f.big ? 3.4 : 2.6, 1 - f.t / .09, 0, 0);
+}
+function mpFireMark(){ if (mpIsHost()) MP.hostFireT = performance.now(); }
+
+function mpSpecTargets(){ return mpPlayerList(); }
+function mpSpecNext(){
+  if (!mpActive() || !P.dead) return;
+  const now = performance.now();
+  if (now - (MP.specSwitchT || 0) < 250) return;
+  MP.specSwitchT = now;
+  const list = mpSpecTargets();
+  if (!list.length) return;
+  const i = list.findIndex(r => r.slot === MP.specSlot);
+  MP.specSlot = list[(i + 1) % list.length].slot;
+}
+function mpSpecStep(){
+  const tag = document.getElementById("spectag");
+  if (!P.dead){
+    if (MP.specSlot !== undefined && MP.specSlot !== null){ MP.specSlot = null; specGun = -1; }
+    tag.classList.add("gone");
+    return;
+  }
+  const list = mpSpecTargets();
+  if (!list.length){ tag.textContent = "ВСЕ ПАЛИ…"; tag.classList.remove("gone"); specGun = -1; return; }
+  let t = list.find(r => r.slot === MP.specSlot);
+  if (!t){ t = list[0]; MP.specSlot = t.slot; }
+  const v = mpVis[t.slot];
+  P.x = v ? v.x : t.x; P.y = v ? v.y : t.y;
+  let d = t.a - P.a; while (d > Math.PI) d -= 2*Math.PI; while (d < -Math.PI) d += 2*Math.PI;
+  P.a += d * .35;
+  specGun = t.gun | 0;
+  const txt = `НАБЛЮДАЕШЬ: ${t.name}` + (list.length > 1 ? " · коснись — следующий" : "");
+  if (tag.textContent !== txt) tag.textContent = txt;
+  tag.style.color = SHIRTS[t.slot] || "#fff";
+  tag.classList.remove("gone");
+}
+function mpPingUpdate(){
+  const el = document.getElementById("mpping");
+  if (!mpActive()){ el.classList.add("gone"); return; }
+  let txt = "";
+  if (mpIsClient() && coop){ const me = coop.players.find(p => p.slot === coop.slot); if (me && me.ping != null) txt = `пинг ${me.ping} мс`; }
+  else if (mpIsHost()){ const ps = mpPeers().map(p => p.ping).filter(v => v != null); if (ps.length) txt = `пинг до ${Math.max(...ps)} мс`; }
+  el.textContent = txt; el.classList.toggle("gone", !txt);
+}
+(() => {
+  const next = () => { if (typeof mpActive === "function" && mpActive() && P.dead) mpSpecNext(); };
+  addEventListener("keydown", e => { if (["KeyE", "KeyQ", "Space", "ArrowRight", "ArrowLeft"].includes(e.code)) next(); });
+  const w = document.getElementById("wrap");
+  if (w) w.addEventListener("pointerdown", next, true);
+})();

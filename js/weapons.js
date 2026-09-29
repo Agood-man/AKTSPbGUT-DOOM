@@ -188,7 +188,7 @@ function updateWeapon(dt){
 }
 
 function playFireAnim(){
-  const w = WPN[gun];
+  const w = WPN[specGun >= 0 && P.dead ? specGun : gun];
   wpnSeq = w.seq; wpnIdx = 0;
   wpnFrame = w.seq[0].f; wpnT = w.seq[0].t;
 }
@@ -198,7 +198,7 @@ gunCv.width = SW; gunCv.height = SH;
 var gunCtx = gunCv.getContext("2d");
 
 function drawGun(){
-  const w = WPN[gun];
+  const w = WPN[specGun >= 0 && P.dead ? specGun : gun];
   const sh = H*w.scale, sw = sh*SW/SH;
   const amp = sh*.035;
   const bx = Math.cos(bobPhase)*amp*1.4;
