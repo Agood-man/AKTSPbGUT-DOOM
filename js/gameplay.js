@@ -153,9 +153,10 @@ function updateLamps(dt){
       L.blink = 3 + (Math.random()*8 | 0);
       L.val = .1; L.t = .05;
       const dx = L.x + .5 - P.x, dy = L.y + .5 - P.y;
+      if (!L.noSprite && typeof fxSparks === "function") fxSparks(L.x + .5, L.y + .5);
       if (dx*dx + dy*dy < 49 && AC){
         const a = atPos(L.x + .5, L.y + .5);
-        noiseBurst(.08, .04 * a.vol, 3200, 1, a.pan);
+        noiseBurst(.08, .04 * a.vol, 3200, 1, a.sp);
       }
     }
   }
@@ -510,7 +511,18 @@ function spawnBoss(){
     drops.push(["bullets", 6.5, 27.5], ["bullets", 28.5, 27.5], ["shells", 6.5, 6.5], ["shells", 28.5, 6.5],
                ["grenades", 17.5, 22.5], ["medkit", 6.5, 17.5], ["medkit", 28.5, 17.5], ["armor", 17.5, 27.5]);
   }
-  for (const [kind, x, y] of drops) items.push({kind, x, y, t:Math.random()*6});
+  for (let [kind, x, y] of drops){
+    if (solid(x, y, .3)){
+      let best = null;
+      for (let r = 1; r < 8 && !best; r++)
+        for (let dy = -r; dy <= r && !best; dy++) for (let dx = -r; dx <= r; dx++){
+          const nx = Math.floor(x) + dx + .5, ny = Math.floor(y) + dy + .5;
+          if (!solid(nx, ny, .3)){ best = [nx, ny]; break; }
+        }
+      if (best){ x = best[0]; y = best[1]; }
+    }
+    items.push({kind, x, y, t:Math.random()*6});
+  }
   P.x = 17.5; P.y = fin ? 29.5 : 26.5; P.a = -Math.PI / 2;
   stat = {fired:0, hit:0, t:0, n:1};
 }
@@ -662,7 +674,17 @@ function levelGrade(){
   return `ОЦЕНКА ЗА ЭТАЖ: ${g} · ${["ПЛОХО","УДОВЛ.","ХОРОШО","ОТЛИЧНО"][g-2]}`;
 }
 
+var NL_ORIG = Math.random;
+function seedStream(k){ return mulberry32((runSeed ^ Math.imul(level + 13, 0x85EBCA77) ^ Math.imul(k + 1, 0x27D4EB2F)) >>> 0); }
+function seedSection(k){ Math.random = seedStream(k); }
+
 function nextLevel(){
+  const orig = Math.random;
+  NL_ORIG = orig;
+  try { nextLevelInner(); } finally { Math.random = orig; }
+}
+
+function nextLevelInner(){
   const grade = level > 0 ? levelGrade() : "";
   if (level > 0){
     P.hp = Math.min(100, P.hp + curve().levelHeal);
@@ -671,8 +693,10 @@ function nextLevel(){
   }
   level++;
   const spawn = generateLevel(level);
+  seedSection(1);
   P.x = spawn.x; P.y = spawn.y; P.a = Math.random()*6.28;
   enemies = []; items = []; shots = [];
+  seedSection(2);
 
   const C = curve();
   for (let i=0;i<C.count;i++){
@@ -689,10 +713,12 @@ function nextLevel(){
       voiceT:2 + Math.random()*5, breathT:0, seeT:0, sees:false
     });
   }
+  seedSection(9);
   if (mpIsHost()) mpScaleLevel(C);
   enemiesLeft = enemies.length;
 
   let gunHint = "";
+  seedSection(3);
   if (mpIsClient()) gunHint = mpClientGunLamp();
   else for (let n=1; n<GUNS.length; n++){
     const need = mpIsHost() ? mpGunNeed(n) : (unlocked[n] ? 0 : 1);
@@ -713,6 +739,7 @@ function nextLevel(){
     gunHint = `НА ЭТАЖЕ: ${GUNS[n].name}`;
     break;
   }
+  seedSection(4);
   if (level >= 5 && !isBossLevel()){
     let spawned = 0;
     for (let r = 0; r < coopN(); r++){
@@ -724,11 +751,13 @@ function nextLevel(){
     }
     buffDry = spawned ? 0 : buffDry + 1;
   }
+  seedSection(5);
   for (let r = 0; r < coopN(); r++) if (level >= 8 && unlocked[3] && Math.random() < .5 * stockFactor("grenades")){
     const gr = freeCell(4);
     items.push({kind:"grenades", x:gr.x, y:gr.y, t:0});
   }
 
+  seedSection(6);
   const drops = [
     ["medkit",  C.medkits],
     ["bullets", ammoCount("bullets", C.bullets)],
@@ -749,7 +778,9 @@ function nextLevel(){
   P.slowT = 0;
   bossRef = null; portal = null; portalT = isFinalLevel() ? 3.4 : 1.6;
   supplyT = 9; supplyShown = false;
+  seedSection(7);
   if (isBossLevel()) spawnBoss();
+  Math.random = NL_ORIG;
   beep("sine", 300, .5, .12, 600);
   if (C.surge){
     setDrone(0);
@@ -780,6 +811,8 @@ function nextLevel(){
   updateLivesUI();
   document.getElementById("seedtag").classList.toggle("gone", !seedCustom);
   if (mpActive()) mpOnLevel();
+  fxReset();
+  if (typeof setReverb === "function") setReverb(biome.id);
   saveGame();
 }
 

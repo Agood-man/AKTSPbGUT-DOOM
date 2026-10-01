@@ -24,7 +24,7 @@ var LAMPS = [];
 var levelLight = "normal";
 var levelL = .9;
 var playerLight = 1;
-var SET_DEFAULT = { sensMouse:1, sensTouch:1, gamma:1, volume:1, quality:1, pos:{}, invHoriz:false, nick:"" };
+var SET_DEFAULT = { sensMouse:1, sensTouch:1, gamma:1, volume:1, quality:1, pos:{}, invHoriz:false, nick:"", audio3d:true };
 var SET = (() => {
   let s = {};
   try { s = JSON.parse(localStorage.getItem(SET_KEY)) || {}; } catch(e){}

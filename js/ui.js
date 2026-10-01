@@ -19,6 +19,7 @@ var CTRL_ORIGIN = { stick:"left bottom", fire:"right bottom", swap:"right bottom
 function applyLayoutPrefs(){
   document.getElementById("invbar").classList.toggle("horiz", !!SET.invHoriz);
   document.getElementById("invdir").textContent = SET.invHoriz ? "УСИЛИТЕЛИ: В РЯД" : "УСИЛИТЕЛИ: СТОЛБИКОМ";
+  document.getElementById("snd3d").textContent = SET.audio3d !== false ? "ОБЪЁМНЫЙ ЗВУК: ВКЛ" : "ОБЪЁМНЫЙ ЗВУК: ВЫКЛ";
   resize();
   xhKey = "";
 }
@@ -152,6 +153,10 @@ function initSettings(){
   onTap(document.getElementById("layoutbtn"), startLayoutEdit);
   onTap(document.getElementById("dipclose"), closeDiploma);
   onTap(document.getElementById("invdir"), () => { SET.invHoriz = !SET.invHoriz; applyLayoutPrefs(); saveSettings(); });
+  onTap(document.getElementById("snd3d"), () => {
+    SET.audio3d = SET.audio3d === false; applyLayoutPrefs(); saveSettings();
+    if (typeof setReverb === "function") setReverb(biome ? biome.id : "small");
+  });
   document.addEventListener("mousedown", e => {
     if (!DESKTOP || !playing || paused || document.pointerLockElement === cv) return;
     if (e.target === document.body || e.target === document.documentElement){

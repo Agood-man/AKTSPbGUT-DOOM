@@ -216,7 +216,7 @@ function mpClientTick(dt){
     e.t += dt;
     if (!e.alive) e.deadT += dt;
   }
-  for (const b of shots){ b.x += b.vx*dt; b.y += b.vy*dt; b.t += dt; if (cell(b.x, b.y) || solid(b.x, b.y, .1)) b.dead = true; }
+  for (const b of shots){ b.x += b.vx*dt; b.y += b.vy*dt; b.t += dt; if (cell(b.x, b.y) || solid(b.x, b.y, .1)){ b.dead = true; shotPop(b); } }
   if (shots.some(b => b.dead)) shots = shots.filter(b => !b.dead);
   for (const g of grenades){ g.x += g.vx*dt; g.y += g.vy*dt; }
   for (const b of beams) b.t += dt;
@@ -662,8 +662,8 @@ function mpShotFx(slot, x, y, a, gi){
   }
   mpFlashes.push({x:x + Math.cos(a)*.5, y:y + Math.sin(a)*.5, t:0, big:gi === 1 || gi === 3});
   const au = atPos(x, y), g = GUNS[gi] || GUNS[0];
-  beep("square", g.snd[0], g.snd[1], g.snd[2] * .55 * au.vol, undefined, au.pan);
-  if (gi === 1) noiseBurst(.25, .2 * au.vol, 2600, 1, au.pan);
+  beep("square", g.snd[0], g.snd[1], g.snd[2] * .55 * au.vol, undefined, au.sp);
+  if (gi === 1) noiseBurst(.25, .2 * au.vol, 2600, 1, au.sp);
 }
 function mpLights(){
   for (const f of mpFlashes) addLight(f.x, f.y, f.big ? 3.4 : 2.6, 1 - f.t / .09, 0, 0);

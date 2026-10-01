@@ -185,6 +185,7 @@ function biomeIndexFor(L){
 }
 
 function generateLevel(depth){
+  genDepth = depth;
   GRID.fill(1);
   rooms = [];
   RNG = mulberry32((runSeed ^ Math.imul(depth + 1, 0x9E3779B1)) >>> 0);
@@ -196,6 +197,7 @@ function generateLevel(depth){
   let spawn = GENERATORS[biome.id]();
   connectAll(spawn);
   themeWalls(depth);
+  placeDecor();
 
   if (cell(spawn.x, spawn.y)){
     search: for (let r=1; r<MW; r++){
@@ -208,6 +210,7 @@ function generateLevel(depth){
     for (let x=(spawn.x|0)-1; x<=(spawn.x|0)+1; x++) setCell(x, y, 0);
 
   buildLightMap(depth);
+  decorLights();
   RNG = Math.random;
   gridVersion++;
   return {x: spawn.x, y: spawn.y};

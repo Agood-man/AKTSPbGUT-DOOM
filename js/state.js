@@ -75,12 +75,81 @@ function masterOut(){
 }
 function applyVolume(){ if (masterGain) masterGain.gain.value = SET.volume; }
 
+var sfxBus = null, sfxDryIn = null, sfxWet = null, sfxConv = null, reverbKey = "";
+var REVERB = {small:[.5, .14], rooms:[.8, .18], maze:[.7, .17], caves:[1.7, .3], arena:[1.5, .27], blocks:[1, .2],
+  rings:[1.1, .22], dorm:[.4, .12], gym:[2.2, .38], library:[1.3, .16], heat:[1.3, .32, 1], canteen:[1, .2],
+  boss:[1.6, .27], final:[2, .32]};
+function sfxIn(){
+  if (!AC) return null;
+  if (!sfxBus){
+    sfxBus = AC.createGain();
+    sfxDryIn = AC.createGain();
+    sfxBus.connect(sfxDryIn); sfxDryIn.connect(masterOut());
+    if (AC.createConvolver){
+      sfxWet = AC.createGain(); sfxWet.gain.value = 0;
+      sfxConv = AC.createConvolver();
+      sfxBus.connect(sfxWet); sfxWet.connect(sfxConv); sfxConv.connect(masterOut());
+      setReverb(typeof biome !== "undefined" && biome ? biome.id : "small");
+    }
+  }
+  return sfxBus;
+}
+function setReverb(id){
+  if (!AC || !sfxConv) return;
+  const r = REVERB[id] || [.8, .14];
+  sfxWet.gain.value = SET.audio3d !== false ? r[1] : 0;
+  if (reverbKey === id) return;
+  reverbKey = id;
+  const n = Math.floor(AC.sampleRate * Math.max(.2, r[0]));
+  const buf = AC.createBuffer(2, n, AC.sampleRate);
+  for (let ch = 0; ch < 2; ch++){
+    const d = buf.getChannelData(ch);
+    for (let i = 0; i < n; i++){
+      let v = (Math.random()*2 - 1) * Math.pow(1 - i/n, 2.6);
+      if (r[2]) v *= .55 + .45 * Math.sin(2*Math.PI*190*i/AC.sampleRate + ch);
+      d[i] = v;
+    }
+  }
+  sfxConv.buffer = buf;
+}
+function soundOccluded(sp){
+  if (sp.d < .8 || typeof rayLen !== "function") return false;
+  return rayLen(P.x, P.y, Math.atan2(sp.y - P.y, sp.x - P.x), sp.d) < sp.d - .35;
+}
 function outNode(pan){
   if (!AC) return null;
-  if (!pan || !AC.createStereoPanner) return masterOut();
+  const sp = pan && typeof pan === "object" ? pan : null;
+  const pv = sp ? sp.pan : pan;
+  const bus = sfxIn();
+  let head = bus;
+  if (sp && SET.audio3d !== false){
+    if (sp.occ === undefined) sp.occ = soundOccluded(sp);
+    const pre = AC.createGain();
+    let dry = sfxDryIn;
+    if (sp.occ){
+      const f = AC.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 650; f.Q.value = .7;
+      const g = AC.createGain(); g.gain.value = .55;
+      f.connect(g); g.connect(sfxDryIn); dry = f;
+    }
+    if (sfxWet){
+      const send = AC.createGain();
+      send.gain.value = (1 + 3 * Math.min(1, sp.d / 12)) * (sp.occ ? 1.3 : 1);
+      pre.connect(send); send.connect(sfxWet);
+    }
+    if (AC.createPanner){
+      const p = AC.createPanner();
+      p.panningModel = "HRTF"; p.distanceModel = "inverse"; p.refDistance = 1; p.rolloffFactor = 0;
+      const x = Math.sin(sp.rel), z = -Math.cos(sp.rel);
+      if (p.positionX){ p.positionX.value = x; p.positionY.value = 0; p.positionZ.value = z; }
+      else p.setPosition(x, 0, z);
+      pre.connect(p); p.connect(dry);
+    } else pre.connect(dry);
+    return pre;
+  }
+  if (!pv || !AC.createStereoPanner) return head;
   const p = AC.createStereoPanner();
-  p.pan.value = Math.max(-1, Math.min(1, pan));
-  p.connect(masterOut());
+  p.pan.value = Math.max(-1, Math.min(1, pv));
+  p.connect(head);
   return p;
 }
 
@@ -88,7 +157,7 @@ function atPos(x, y){
   const dx = x - P.x, dy = y - P.y;
   const d = Math.hypot(dx, dy);
   const rel = angleDiff(Math.atan2(dy, dx), P.a);
-  return {vol: Math.max(0, 1 - d/14), pan: Math.sin(rel), d};
+  return {vol: Math.max(0, 1 - d/14), pan: Math.sin(rel), d, sp:{pan: Math.sin(rel), rel, d, x, y}};
 }
 
 function beep(type, f0, dur, vol, f1, pan){

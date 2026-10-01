@@ -348,7 +348,7 @@ function rebuildMapCache(s){
     for (let x = 0; x < MW; x++){
       const c = GRID[y*MW + x];
       if (!c) continue;
-      m.fillStyle = (WALL[c] || WALL[1])[0];
+      m.fillStyle = (WALL[decorBase(c)] || WALL[1])[0];
       m.fillRect(2 + x*s, 2 + y*s, s, s);
     }
   }
