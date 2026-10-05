@@ -34,9 +34,61 @@ function startDrone(){
   drone.start(); sub.start();
 }
 
+var HB_URL = "assets/sounds/heartbreath.mp3";
+var HB_LOOPS = [[0.2, 5.94], [6.34, 11.69], [12.09, 17.49], [17.89, 23.45], [23.85, 27.36]];
+var HB_HP = [70, 55, 40, 28, 15];
+var HB_GAIN = [.3, .45, .6, .75, .88];
+var hbBuf = null, hbLoading = false, hbFailed = false, hbCur = -1, hbSrc = null, hbGain = null;
+var hbWatch = null;
+function hbLoad(){
+  if (hbBuf || hbLoading || hbFailed || !AC) return;
+  hbLoading = true;
+  if (!hbWatch) hbWatch = setInterval(() => { if (hbCur >= 0 || (typeof playing !== "undefined" && playing)) hbTick(); }, 250);
+  fetch(HB_URL).then(r => { if (!r.ok) throw new Error("hb"); return r.arrayBuffer(); })
+    .then(ab => new Promise((res, rej) => AC.decodeAudioData(ab, res, rej)))
+    .then(b => { hbBuf = b; })
+    .catch(() => { hbFailed = true; })
+    .finally(() => { hbLoading = false; });
+}
+function hbOn(){ return !!(AC && hbBuf); }
+function hbLevelFor(hp){
+  let lv = -1;
+  for (let i = 0; i < HB_HP.length; i++){
+    const edge = HB_HP[i] + (hbCur >= i ? 3 : 0);
+    if (hp < edge) lv = i;
+  }
+  return lv;
+}
+function hbSwitch(lv){
+  if (!AC || lv === hbCur) return;
+  const t = AC.currentTime, calmer = lv < hbCur;
+  if (hbSrc){
+    const g = hbGain, s = hbSrc, f = calmer ? 1.6 : .7;
+    g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(g.gain.value, t); g.gain.linearRampToValueAtTime(0, t + f);
+    try { s.stop(t + f + .05); } catch(e){}
+  }
+  hbSrc = null; hbGain = null; hbCur = lv;
+  if (lv < 0 || !hbBuf) return;
+  const [a, b] = HB_LOOPS[lv];
+  const s = AC.createBufferSource();
+  s.buffer = hbBuf; s.loop = true; s.loopStart = a; s.loopEnd = b;
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(HB_GAIN[lv], t + (calmer ? 1.2 : .8));
+  s.connect(g); g.connect(masterOut());
+  s.start(t, a + Math.random() * (b - a) * .5);
+  hbSrc = s; hbGain = g;
+}
+function hbTick(){
+  if (!AC) return;
+  if (!hbBuf){ hbLoad(); return; }
+  const live = typeof playing !== "undefined" && playing && !(typeof paused !== "undefined" && paused);
+  hbSwitch(live ? hbLevelFor(viewHp()) : -1);
+}
+
 var ambT = 4, heartT = 0;
 function ambience(dt){
   if (!AC) return;
+  hbTick();
   ambT -= dt;
   if (ambT <= 0){
     ambT = 5 + Math.random()*11;
@@ -45,7 +97,7 @@ function ambience(dt){
     else if (r < .7) beep("sawtooth", 60 + Math.random()*40, 1.1, .05, 32);
     else noiseBurst(.9, .05, 500, .6);
   }
-  if (viewHp() < 28 && playing){
+  if (!hbOn() && viewHp() < 28 && playing){
     gaspT -= dt;
     if (gaspT <= 0){
       gaspT = 1.1 + Math.random()*.6;
@@ -53,7 +105,7 @@ function ambience(dt){
       setTimeout(() => noiseBurst(.22, .06, 480, .6), 330);
     }
   }
-  if (viewHp() < 40 && playing){
+  if (!hbOn() && viewHp() < 40 && playing){
     heartT -= dt;
     if (heartT <= 0){
       heartT = .45 + (viewHp()/40)*.55;
