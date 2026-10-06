@@ -160,7 +160,7 @@ function mpSnap(){
   const PL = [[0, +P.x.toFixed(2), +P.y.toFixed(2), +P.a.toFixed(2), P.dead ? 0 : 1, gun, Math.min(999, Math.round(now - (MP.hostFireT || 0))), Math.round(P.hp)]];
   for (const p of mpPeers()) PL.push([p.slot, +p.gs.x.toFixed(2), +p.gs.y.toFixed(2), +p.gs.a.toFixed(2), p.gs.alive ? 1 : 0,
                                       p.gs.gun | 0, Math.min(999, Math.round(now - (p.gs.fireT || 0))), Math.round(p.gs.hp || 0)]);
-  return {t:"snap", q:++MP.seq, L:level, left:enemiesLeft, E, I, PL,
+  return {t:"snap", q:++MP.seq, ap:mpAllPaused() ? 1 : 0, pc:mpPauseCount(), L:level, left:enemiesLeft, E, I, PL,
     S:shots.map(b => [+b.x.toFixed(2), +b.y.toFixed(2), +b.vx.toFixed(2), +b.vy.toFixed(2), b.big ? 1 : 0]),
     G:grenades.map(g => [+g.x.toFixed(2), +g.y.toFixed(2), +g.vx.toFixed(2), +g.vy.toFixed(2)]),
     B:booms.map(b => [+b.x.toFixed(2), +b.y.toFixed(2), +b.t.toFixed(2)]),
@@ -169,6 +169,7 @@ function mpSnap(){
 }
 
 function mpApplySnap(m){
+  if (typeof m.q === "number" && m.q > (MP.lastQ || 0)){ MP.allPaused = !!m.ap; if (Array.isArray(m.pc)) MP.pauseCount = m.pc; }
   if (m.L !== level) return;
   if (typeof m.q === "number"){ if (m.q <= (MP.lastQ || 0)) return; MP.lastQ = m.q; }
   const arr = [], seen = new Set();
@@ -231,6 +232,8 @@ function mpTick(dt){
   while (mpFlashes.length && mpFlashes[0].t > .09) mpFlashes.shift();
   MP.pingT = (MP.pingT || 0) - dt;
   if (MP.pingT <= 0){ MP.pingT = .5; mpPingUpdate(); }
+  MP.pzT = (MP.pzT || 0) - dt;
+  if (MP.pzT <= 0){ MP.pzT = .2; mpPauseUi(); }
   MP.sendT -= dt;
   if (mpIsHost()){
     mpRecordHist();
@@ -247,7 +250,7 @@ function mpTick(dt){
     }
   } else if (MP.sendT <= 0 && coop.host){
     MP.sendT = 1/20;
-    coopSendFast(coop.host, {t:"st", q:++MP.seq, x:+P.x.toFixed(2), y:+P.y.toFixed(2), a:+P.a.toFixed(3), g:gun, al:P.dead ? 0 : 1,
+    coopSendFast(coop.host, {t:"st", q:++MP.seq, pz:paused ? 1 : 0, x:+P.x.toFixed(2), y:+P.y.toFixed(2), a:+P.a.toFixed(3), g:gun, al:P.dead ? 0 : 1,
                             u:unlocked.reduce((m, v, i) => m | (v ? 1 << i : 0), 0),
                             hp:Math.round(P.hp), W, H, pl:+CAM_PLANE.toFixed(3)});
   }
@@ -299,6 +302,7 @@ function mpHostMsg(s, peer, m){
   if (m.t === "st"){
     const g = peer.gs || (peer.gs = {alive:true});
     if (typeof m.q === "number"){ if (m.q <= (g.lastQ || 0)) return; g.lastQ = m.q; }
+    g.pz = !!m.pz;
     if (typeof m.x === "number" && typeof m.y === "number" && !solid(m.x, m.y, .05)){ g.x = m.x; g.y = m.y; }
     if (g.x === undefined){ g.x = P.x; g.y = P.y; }
     g.a = +m.a || 0; g.gun = m.g | 0; g.hp = +m.hp || 0; g.u = m.u | 0;
@@ -379,6 +383,7 @@ function mpEnd(msg){
   MP = null; mpTarget = null; mpRemote = []; mpEnt.clear(); P.dead = false; mpHideTags(); specGun = -1; specHp = -1;
   document.body.classList.remove("spectating");
   document.getElementById("spectag").classList.add("gone"); document.getElementById("mpping").classList.add("gone");
+  const pmp = document.getElementById("pausemp"); if (pmp) pmp.classList.add("gone");
   if (msg && playing){ quitToMenu(); showBanner(msg, true); }
   else if (msg && wasClient){ showBanner(msg, true); }
 }
@@ -388,6 +393,7 @@ function mpQuit(){
   MP = null; mpTarget = null; mpRemote = []; mpEnt.clear(); P.dead = false; mpHideTags(); specGun = -1; specHp = -1;
   document.body.classList.remove("spectating");
   document.getElementById("spectag").classList.add("gone"); document.getElementById("mpping").classList.add("gone");
+  const pmp = document.getElementById("pausemp"); if (pmp) pmp.classList.add("gone");
 }
 
 var STUDENT_FRAMES = {};
@@ -748,4 +754,26 @@ function mpRewind(t){
     e.x = x; e.y = y;
   }
   return saved;
+}
+
+function mpAllPaused(){
+  if (!mpActive()) return false;
+  if (mpIsHost()) return paused && mpPeers().every(p => p.gs && p.gs.pz);
+  return paused && !!MP.allPaused;
+}
+function mpPauseCount(){
+  if (mpIsHost()){
+    const ps = mpPeers();
+    return [(paused ? 1 : 0) + ps.filter(p => p.gs && p.gs.pz).length, 1 + ps.length];
+  }
+  return MP.pauseCount || [paused ? 1 : 0, coop ? coop.players.length : 1];
+}
+function mpPauseUi(){
+  const el = document.getElementById("pausemp");
+  if (!el) return;
+  if (!mpActive() || !paused){ el.classList.add("gone"); return; }
+  const [n, total] = mpPauseCount();
+  el.textContent = mpAllPaused() ? "Все на паузе — игра остановлена"
+    : `Игра идёт — на паузе ${n} из ${total}. Мир остановится, когда на паузе будут все`;
+  el.classList.remove("gone");
 }

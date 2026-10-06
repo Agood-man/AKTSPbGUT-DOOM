@@ -6,6 +6,7 @@ function mpActive(){ return false; }
 function mpIsHost(){ return false; }
 function mpIsClient(){ return false; }
 function coopN(){ return 1; }
+function mpAllPaused(){ return false; }
 var specGun = -1, specHp = -1;
 var coopRun = false, coopStarting = false;
 function viewHp(){ return P.dead ? (specHp >= 0 ? specHp : 100) : P.hp; }

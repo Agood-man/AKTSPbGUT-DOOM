@@ -200,7 +200,7 @@ function loop(t){
   const dt = Math.min(.05, rawMs/1000); last = t;
   if (reviveT > 0){ drawRevive(dt); reviveT -= dt; if (reviveT <= 0) finishRevive(); }
   else if (introT > 0){ introT -= dt; }
-  else if (playing && !paused && !dbgShown && !diplomaShown){
+  else if (playing && (!paused || (typeof mpActive === "function" && mpActive() && !mpAllPaused())) && !dbgShown && !diplomaShown){
     update(dt);
     autoSave += dt;
     if (autoSave > 15){ autoSave = 0; saveGame(); }
