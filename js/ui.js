@@ -336,7 +336,9 @@ function beginRun(sv){
       inv.shield = Math.min(INV_MAX, num(sv.inv[2], 0) | 0);
     }
     playing = true;
-    nextLevel();
+    resumeLoad = true;
+    try { nextLevel(); } finally { resumeLoad = false; }
+    if (restoreLevel(sv.lv)) saveGame();
   } else {
     clearSave();
     const typed = (seedIn.value || "").trim().replace(/^#/, "").toUpperCase();

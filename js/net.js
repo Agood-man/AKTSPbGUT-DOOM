@@ -522,15 +522,11 @@ function coopRender(){
   const diag = document.getElementById("cp_diag");
   if (s){
     const ok = s.trackers.filter(t => t.state === "ok").length;
-    const n = s.net;
-    const netTxt = n ? ` · Твоя сеть: внешний адрес ${n.srflx ? "✓" : "✗"}${coopTurn ? `, ретранслятор ${n.relay ? "✓" : "✗"}` : ""}` : "";
     if (s.role === "client" && s.host && s.host.opened){
-      diag.textContent = "Соединены с хостом — серверы поиска больше не нужны." + netTxt;
+      diag.textContent = "Соединены с хостом";
       return coopRenderRest(s);
     }
-    diag.textContent = `Серверы поиска: ${ok} из ${s.trackers.length} на связи${netTxt} · ` +
-      s.trackers.map(t => (t.state === "ok" ? "✓ " : t.state === "connecting" ? "… " : "✗ ") +
-        t.url.replace(/^wss?:\/\//, "").replace(/[:/].*$/, "")).join(" · ");
+    diag.textContent = `Серверы поиска: ${ok} из ${s.trackers.length} на связи`;
   } else diag.textContent = "";
   coopRenderRest(s);
 }

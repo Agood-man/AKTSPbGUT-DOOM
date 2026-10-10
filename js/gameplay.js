@@ -9,8 +9,59 @@ function saveGame(){
     guns:unlocked.reduce((m, v, i) => m | (v ? 1 << i : 0), 0),
     inv:[inv.rage, inv.haste, inv.shield],
     lives, lifeDrops, streak:bestStreak, seedCustom, skill, bossKills, buffDry,
-    time:Math.round(runTime)
+    time:Math.round(runTime), lv:levelSnapshot()
   }));
+}
+
+function levelSnapshot(){
+  const r2 = v => Math.round(v * 100) / 100;
+  return {
+    L: level,
+    it: items.filter(o => !o.dead && typeof o.kind === "string").slice(0, 300).map(o => [o.kind, r2(o.x), r2(o.y)]),
+    en: enemies.filter(e => e.alive && typeof e.sid === "number").map(e => [e.sid, r2(e.x), r2(e.y), Math.ceil(e.hp)]),
+    boss: bossRef ? (bossRef.alive ? Math.round(bossRef.hp / bossRef.maxHp * 10000) / 10000 : -1) : null,
+    portal: portal ? [r2(portal.x), r2(portal.y)] : null,
+    p: [r2(P.x), r2(P.y), Math.round(P.a * 1000) / 1000]
+  };
+}
+
+function restoreLevel(lv){
+  if (!lv || typeof lv !== "object" || lv.L !== level) return false;
+  if (Array.isArray(lv.it)){
+    items = lv.it.filter(a => Array.isArray(a) && typeof a[0] === "string" && isFinite(a[1]) && isFinite(a[2]))
+      .map(([kind, x, y]) => ({kind, x:+x, y:+y, t:Math.random()*6}));
+    let changed = false;
+    for (const L of LAMPS) if (L.gun && !items.some(o => o.kind === L.gun)){ L.state = "off"; L.val = 0; L.gun = null; changed = true; }
+    if (changed) composeLight();
+  }
+  if (Array.isArray(lv.en)){
+    const keep = new Map();
+    for (const a of lv.en) if (Array.isArray(a) && isFinite(a[0])) keep.set(a[0] | 0, a);
+    enemies = enemies.filter(e => {
+      if (e === bossRef) return true;
+      const a = typeof e.sid === "number" ? keep.get(e.sid) : null;
+      if (!a) return false;
+      if (isFinite(a[1]) && isFinite(a[2]) && !solid(+a[1], +a[2], .2)){ e.x = +a[1]; e.y = +a[2]; }
+      if (isFinite(a[3]) && a[3] > 0) e.hp = Math.min(e.hp, +a[3]);
+      return true;
+    });
+  }
+  if (bossRef && typeof lv.boss === "number"){
+    if (lv.boss < 0){
+      bossRef.alive = false; bossRef.hp = 0; bossRef.deadT = 30;
+      enemies = enemies.filter(e => e !== bossRef);
+      stopBossIntro(); introT = 0;
+    } else if (lv.boss > 0){
+      bossRef.hp = Math.max(1, Math.min(bossRef.maxHp, lv.boss * bossRef.maxHp));
+    }
+  }
+  if (Array.isArray(lv.portal) && isFinite(lv.portal[0]) && isFinite(lv.portal[1])) portal = {x:+lv.portal[0], y:+lv.portal[1], t:1};
+  if (Array.isArray(lv.p) && isFinite(lv.p[0]) && isFinite(lv.p[1]) && !solid(+lv.p[0], +lv.p[1], .3)){
+    P.x = +lv.p[0]; P.y = +lv.p[1]; if (isFinite(lv.p[2])) P.a = +lv.p[2];
+  }
+  enemiesLeft = enemies.filter(e => e.alive).length;
+  updateHUD();
+  return true;
 }
 function loadGame(){
   try {
@@ -684,9 +735,10 @@ function nextLevel(){
   try { nextLevelInner(); } finally { Math.random = orig; }
 }
 
+var resumeLoad = false;
 function nextLevelInner(){
-  const grade = level > 0 ? levelGrade() : "";
-  if (level > 0){
+  const grade = level > 0 && !resumeLoad ? levelGrade() : "";
+  if (level > 0 && !resumeLoad){
     P.hp = Math.min(100, P.hp + curve().levelHeal);
     ammo.bullets += 10;
     P.inv = 0;
@@ -706,7 +758,7 @@ function nextLevelInner(){
     else if (r < C.bulls + C.casters) type = "caster";
     const k = KIND[type], p = freeCell(8);
     enemies.push({
-      type, x:p.x, y:p.y, hp:k.hp + C.hpBonus(type), alive:true,
+      sid:i, type, x:p.x, y:p.y, hp:k.hp + C.hpBonus(type), alive:true,
       t:Math.random()*10, cd:Math.random()*1.5 + .5, deadT:0,
       speed:enemySpeed(k),
       stuck:0, slideT:0, slideDir:1, seen:false, hurtT:0,
