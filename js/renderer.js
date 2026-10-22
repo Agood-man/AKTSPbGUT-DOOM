@@ -1449,7 +1449,7 @@ function render(){
   const mix = (a, b, t) => Math.round(a + (b - a)*t);
   const dim = (r, gg, b, k) => `rgb(${mix(0,r,k)},${mix(0,gg,k)},${mix(0,b,k)})`;
   let g = ctx.createLinearGradient(0,0,0,horizon);
-  g.addColorStop(0, dim(16,10,20, L*.5)); g.addColorStop(1, dim(43,29,34, L));
+  g.addColorStop(0, dim(214,209,198, Math.min(1, L*1.05))); g.addColorStop(.5, dim(176,171,162, L*.62)); g.addColorStop(1, dim(92,88,82, L*.34));
   ctx.fillStyle = g; ctx.fillRect(0,0,W,horizon);
   g = ctx.createLinearGradient(0,horizon,0,H);
   g.addColorStop(0, dim(36,26,21, L*.55)); g.addColorStop(1, dim(74,56,44, L));

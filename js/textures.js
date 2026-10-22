@@ -197,6 +197,8 @@ function generateLevel(depth){
   let spawn = GENERATORS[biome.id]();
   connectAll(spawn);
   themeWalls(depth);
+  sovietDamage();
+  buildSovietWalls();
   placeDecor();
 
   if (cell(spawn.x, spawn.y)){

@@ -322,3 +322,90 @@ function fxDripSplash(p){
   }
 }
 GENERATORS.boss = genBossArenaThemed;
+var SOV_PAINTS = [[143,181,154], [127,168,138], [156,191,154], [176,196,150], [138,154,134],
+  [143,179,196], [127,167,184], [150,170,190], [201,179,143], [209,188,150], [169,155,189],
+  [157,143,179], [201,159,146], [200,178,106], [190,170,120]];
+var sovWall = null;
+
+function buildSovietWalls(){
+  const r = RNG;
+  const jit = (v, a) => Math.max(0, Math.min(255, Math.round(v + (r()*2 - 1) * a)));
+  const base = SOV_PAINTS[(r() * SOV_PAINTS.length) | 0];
+  const paint = base.map(v => jit(v, 9));
+  const white = [jit(226, 4), jit(221, 4), jit(207, 5)];
+  const split = Math.round(64 * (.15 + r() * .37));
+  const stripe = r() < .75, plinth = r() < .6;
+  const stripeCol = paint.map(v => Math.round(v * .55));
+  const plinthCol = r() < .5 ? [74, 52, 38] : paint.map(v => Math.round(v * .48));
+  sovWall = {paint, white, split};
+  const seedBase = (r() * 1e9) | 0;
+
+  const make = variant => {
+    const c = document.createElement("canvas"); c.width = c.height = 64;
+    const g = c.getContext("2d");
+    const img = g.createImageData(64, 64), d = img.data;
+    let s = (seedBase + variant * 7919) >>> 0;
+    const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+    const put = (x, y, rgb, k) => { const i = (y*64 + x)*4; d[i] = rgb[0]*k; d[i+1] = rgb[1]*k; d[i+2] = rgb[2]*k; d[i+3] = 255; };
+    for (let y = 0; y < 64; y++) for (let x = 0; x < 64; x++){
+      let col, k = 1 + (rnd() - .5) * .07;
+      if (y < split){ col = white; k *= 1 - .05 * (y / Math.max(1, split)); }
+      else if (stripe && y <= split + 1){ col = stripeCol; }
+      else if (plinth && y >= 61){ col = plinthCol; }
+      else { col = paint; k *= 1 - .1 * ((y - split) / (64 - split)); if (y > 52 && rnd() < .05) k *= .86; }
+      put(x, y, col, k);
+    }
+    for (let n = 0; n < 6; n++){
+      const x = rnd()*64 | 0, y = rnd()*64 | 0, i = (y*64 + x)*4;
+      d[i] *= .8; d[i+1] *= .8; d[i+2] *= .8;
+    }
+    if (variant > 0){
+      const blobs = variant === 4 ? 2 : 1;
+      for (let b = 0; b < blobs; b++){
+        const cx = 10 + rnd()*44, cy = 8 + rnd()*48;
+        const rx = (blobs > 1 ? 6 : 9) + rnd() * (blobs > 1 ? 6 : 9), ry = (blobs > 1 ? 3 : 4) + rnd() * (blobs > 1 ? 3 : 5);
+        const ph = rnd() * 6.28, ph2 = rnd() * 6.28;
+        const inside = (x, y) => {
+          const dx = (x - cx) / rx, dy = (y - cy) / ry, a = Math.atan2(dy, dx);
+          const w = 1 + .22*Math.sin(a*3 + ph) + .14*Math.sin(a*5 + ph2);
+          return dx*dx + dy*dy < w*w;
+        };
+        for (let y = 0; y < 64; y++) for (let x = 0; x < 64; x++){
+          if (!inside(x, y)) continue;
+          const i = (y*64 + x)*4;
+          const edge = !inside(x - 1, y) || !inside(x + 1, y) || !inside(x, y - 1) || !inside(x, y + 1);
+          if (edge){
+            const lit = !inside(x, y - 1) ? 1.02 : !inside(x, y + 1) ? .62 : .9;
+            put(x, y, [212, 206, 194], lit);
+          } else {
+            const v = 136 + (rnd() - .5) * 26 - (rnd() < .08 ? 30 : 0);
+            put(x, y, [v, v - 3, v - 8], 1);
+          }
+        }
+      }
+      if (variant >= 3){
+        let x = 8 + rnd()*48, y = rnd() * 20;
+        for (let st = 0; st < 26 && y < 63; st++){
+          const i = ((y|0)*64 + (x|0))*4;
+          d[i] *= .55; d[i+1] *= .55; d[i+2] *= .55;
+          y += 1; x += (rnd() - .5) * 1.6; x = Math.max(0, Math.min(63, x));
+        }
+      }
+    }
+    g.putImageData(img, 0, 0);
+    return c;
+  };
+  for (let v = 0; v < 5; v++){ const c = make(v); TEX[v + 1] = [c, darken(c, .34)]; }
+  for (const k in TEX) if (+k >= 100) delete TEX[k];
+  for (const k in TEXD) delete TEXD[k];
+  const css = (rgb, k) => `rgb(${(rgb[0]*k)|0},${(rgb[1]*k)|0},${(rgb[2]*k)|0})`;
+  for (let v = 1; v <= 5; v++) WALL[v] = [css(paint, .62), css(paint, .42)];
+}
+
+function sovietDamage(){
+  const p = biome.id === "heat" || biome.id === "caves" ? .32 : biome.id === "boss" || biome.id === "final" ? .14 : .2;
+  for (let i = 0; i < GRID.length; i++){
+    if (GRID[i] !== 1 && GRID[i] !== 2 && GRID[i] !== 3) continue;
+    GRID[i] = RNG() < p ? 2 + ((RNG() * 4) | 0) : 1;
+  }
+}
